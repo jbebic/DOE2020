@@ -10,6 +10,7 @@ results/**
 plots/**
 output/**
 backup/**
+logs/**
 
 # C extensions
 *.so
