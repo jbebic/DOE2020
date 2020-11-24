@@ -3,6 +3,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Specific to DOE2020 repository
+private/**
+cases/**
+results/**
+plots/**
+output/**
+backup/**
+
 # C extensions
 *.so
 
