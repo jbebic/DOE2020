@@ -20,7 +20,19 @@ import os # operating system interface
 import andes
 from andes.core.var import BaseVar, Algeb, ExtAlgeb
 
-def save_results(ss:andes.system, fout):
+def save_results(ss:andes.system, dirout:str, foutroot:str):
+    # Optional debugging message
+    logging.debug('entered save_results function')
+
+    # saving ANDES bus data
+    logging.debug('saving ANDES bus data')
+    fout = os.path.join(dirout,foutroot + '.bus.csv')
+    dfBus = ss.Bus.as_df()
+    dfBus.to_csv(fout, index=False)
+
+    # saving ANDES lines data
+
+    # saving ANDES generartor data
     
     return
 
@@ -44,10 +56,9 @@ if __name__ == "__main__":
         # The suffix can be one or more of : _out.txt, _out.lst, _out.npz, _out_N.pdf
         ss = andes.run(fnamein, input_path=dirin, output_path=dirout)
         
-        # adding one more output file to save csv results
-        fout = open(os.path.join(dirout,fnamein.replace('.raw', '.csv')), 'w')
-        save_results(ss, fout)
-        fout.close()
+        # deriving the root name for output files based on the input file name
+        foutroot = fnamein.replace('.m', '')
+        save_results(ss, dirout, foutroot)
 
     if True: # loading the matpower file
         dirin = 'cases/'
@@ -58,10 +69,9 @@ if __name__ == "__main__":
         # The suffix can be one or more of : _out.txt, _out.lst, _out.npz, _out_N.pdf
         ss = andes.run(fnamein, input_path=dirin, output_path=dirout)
         
-        # adding one more output file to save csv results
-        fout = open(os.path.join(dirout,fnamein.replace('.m', '.csv')), 'w')
-        save_results(ss, fout)
-        fout.close()
+        # deriving the root name for output files based on the input file name
+        foutroot = fnamein.replace('.m', '')
+        save_results(ss, dirout, foutroot)
 
     # preparing for exit
     logging.shutdown()
