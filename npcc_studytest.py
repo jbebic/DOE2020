@@ -5,8 +5,11 @@ Created on Mon Nov 30 09:15:04 2020
 @copyright: Achillea Research, Inc.
 @author: jzb@achillearesearch.com; txia4@vols.utk.edu
 
-v1.2 TX20201203
+v1.21 TX20201303
 
+
+v1.2 TX20201202
+compute voltage severity for matrix 1
 
 v1.1 Tx20201130
 
@@ -159,15 +162,36 @@ if __name__ == "__main__":
         print()
         print('The shape of Mx1 is (%d, %d)' %(dfMx1.shape[0], dfMx1.shape[1]))
         print('There are %d unique iteration numbers' %(len(dfMx1.iloc[:,0].unique())))
-        
-        voltage_sevrity = np.matlib.zeros((4640,141))
+        # compute voltage sevrity 
+        voltage_sevr = np.matlib.zeros((4640,141))
         for i in range(dfMx1.shape[0]):
             for j in range(dfMx1.shape[1]):
                 temp = dfMx1.iloc[i,j]
                 if np.isnan(temp):
-                    voltage_sevrity[i,j] = np.nan
+                    voltage_sevr[i,j] = np.nan
                 else:
-                    voltage_sevrity[i,j] = voltage_severity(temp)
+                    voltage_sevr[i,j] = voltage_severity(temp)
+        voltage_sevr[:,0] = dfMx1.iloc[:,0].to_numpy().reshape((4640,1))
+        
+         # compute severity for each contigency
+        weight_vector = np.matlib.ones((dfMx1.shape[1],1))
+        weight_vector[0,0] = 0
+        severity_vector = np.matlib.zeros((dfMx1.shape[0],1))
+        for i in range(voltage_sevr.shape[0]):
+            temp_dot = np.dot(voltage_sevr[i,:],weight_vector)
+            severity_vector[i,0] = np.sum(temp_dot)
+            
+        severity_vector = severity_vector.reshape(20,232)
+        severity_vector = np.nan_to_num(severity_vector)   # replace the Nan with 0
+        
+        plot_num = 18
+        plot_x = np.linspace(1,severity_vector[:,plot_num].shape[0],severity_vector[:,plot_num].shape[0])
+        plot_y = severity_vector[:,plot_num]
+        figure1 = plt.plot(plot_x, plot_y,'C1')
+        plt.xlabel('Iteration number')
+        plt.ylabel('bus voltage severity')
+        plt.title('The bus voltage severity')
+            
                     
 
                 
