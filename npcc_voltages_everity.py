@@ -1,25 +1,36 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Dec  3 18:14:24 2020
+Created on Sat Dec  5 16:45:06 2020
 
-@copyright: Achillea Research, Inc.
-@author: jzb@achillearesearch.com
+@author: txia4@vols.utk.edu
 
-v1.0 JZB20201203
-Illustration of vectorized calculations of severity metrics using numpy and plotting of 
-the severity transfer functions as an illustration of matplotlib plotting
-Heavily commented to aid in the comprehension.
+v1.2 TX20201210
+Save the file in PDF
+
+v1.0 TX20201205
+Combine the vector computation and serverity together
 """
 
+import logging
 import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
+import matplotlib.pyplot as plt # plotting
+import numpy.matlib 
 import matplotlib.backends.backend_pdf as dpdf # pdf output
 
-from datetime import datetime
+from datetime import datetime # time stamps
 import os # operating system interface
-import sys # errors handling and paths to local modules
 
-import logging
+import andes
+from andes.core.var import BaseVar, Algeb, ExtAlgeb
+
+#%% read_contingencies
+def read_cont_mx1(dirin, fname):
+    
+    logging.info('reading contigency matrix')
+    df = pd.read_csv(os.path.join(dirin, fname))
+    return df
+
 
 #%% calculate severity at specified dv breakpoints
 def calculate_severity_breakpoints(dv, ks):
@@ -67,60 +78,103 @@ def calculate_voltage_severity(v, dv, ks, vnom=1.0):
     severity = np.stack([severity, zero_row]) # stacks two rows into a matrix
     severity = np.max(severity, axis = 0) # column-wise maximum of severity and the zero row
     return severity # this returns severity by bus.
-
-#%% plot severity transfer function
-def plot_severity_tf(pltPdf, dv, ks, title='Voltage Severity TF'):
-    fig, (ax0,ax1) = plt.subplots(nrows=2, ncols=1, figsize=(6.5,4.8), dpi=300,sharex=True) # , sharex=True
+#%% 
+def plot_severity(pltPdf, plot_x, plot_y, title=''):
+    fig, ax0 = plt.subplots(nrows=1, ncols=1, figsize=(6.5,4.8), dpi=300) # , sharex=True
     plt.suptitle(title)
     temp = datetime.now()
     temp = temp.strftime("%m/%d/%Y, %H:%M:%S")
     ax0.annotate(temp, (0.98,0.02), xycoords="figure fraction", horizontalalignment="right")
-   
-    sv = calculate_severity_breakpoints(dv, ks)
-    v = np.linspace(0.8, 1.2, 100) # creating a regularly spaced numpy array with 100 data points
-    s = calculate_voltage_severity(v, dv, ks)
     
-    ax0.plot(v, s, label='Vseverity')
-    ax0.plot(1+dv, sv, 'o', color='C1') # labeling with circles
-    ax0.plot(1-dv, sv, 'd', color='C1') # labeling with diamonds
+    ax0.plot(plot_x, plot_y, label='Vseverity')
+
     ax0.grid(True, which='both', axis='both')
-    ax0.set_ylim([0,0.3]) # when range not specified, the graph autoscales 
+    #ax0.set_ylim([0,0.3]) # when range not specified, the graph autoscales 
     ax0.set_ylabel('Severity [pu]')
     ax0.legend()
     #ax0.set_xlabel('Voltage [pu]')
-    ax1.set_xlabel('Voltage [pu]')
+    ax0.set_xlabel('Iteration [pu]')
     pltPdf.savefig() # saves figure to the pdf file scpecified by pltPdf
     plt.close() # Closes fig to clean up memory
     return
+    
 
+#%% Code testing
 if __name__ == "__main__":
 
     # If changing basicConfig, make sure to close the dedicated console; it will not take otherwise
-    logging.basicConfig(filename='logs/severity.log', filemode='w', 
+    logging.basicConfig(filename='logs/DOE2020.log', filemode='w', 
                         format='%(levelname)s: %(message)s',
-                        level=logging.DEBUG)
+                        level=logging.INFO)
     
     # this supposedly shows where the file is, but it does not work for me
     # print(logging.getLoggerClass().root.handlers[0].baseFilename)
-
-    if True:
+       
+    if True: # loading the contingency results and test voltage severtiy
+        dirin = 'results/'
+        fnamein = '0v93_full_mx1.csv'
+        
+        # loding in Mx1
+        dfMx1 = read_cont_mx1(dirin, fnamein)
+        print()
+        #print('The shape of Mx1 is (%d, %d)' %(dfMx1.shape[0], dfMx1.shape[1]))
+        #print('There are %d unique iteration numbers' %(len(dfMx1.iloc[:,0].unique())))
+        logging.info('The shape of Mx1 is (%d, %d)' %(dfMx1.shape[0], dfMx1.shape[1]))
+        logging.info('There are %d unique iteration numbers' %(len(dfMx1.iloc[:,0].unique())))
+        
         # define the transfer function of severity (positive values only, non-decreasing)
         dv_values = np.array([0.03, 0.08])
         ks_values = np.array([1., 2.])
-        # defining arbitrary voltages to evaluate 
-        v_bus = np.array([0.91, 1.01, 0.94, 1.05, 1.1, 0.99]) 
+        
+        npMx1 = dfMx1.to_numpy()
+        npMx1 = np.delete(npMx1, 0, axis=1)             # the first column is the iteration number so delete it
+        bus_totalnum = npMx1.shape[1]
+        iteration_totalnum = 20
+        contigency_totalnum = int(npMx1.shape[0]/iteration_totalnum)
+        
+        severity_matrix = calculate_voltage_severity(npMx1, dv_values, ks_values)
+        severity_matrix = severity_matrix.reshape(npMx1.shape)
+        
+         # compute severity for each contigency
+        weight_vector = np.matlib.ones((severity_matrix.shape[1],1))
+        severity_vector = np.matlib.zeros((dfMx1.shape[0],1))
+        for i in range(severity_matrix.shape[0]):
+            temp_dot = np.dot(severity_matrix[i,:],weight_vector)
+            severity_vector[i,0] = np.sum(temp_dot)
+        
+        severity_vector = severity_vector.reshape(iteration_totalnum,contigency_totalnum)
+        severity_vector = np.nan_to_num(severity_vector)   # replace the Nan with 0
+        severity_vector_sum = np.sum(severity_vector, axis = 1) 
+ 
+       
+        dirplots = 'plots/' # must create this relative directory path before running
+        fnameplot = 'voltage_severity2.pdf' # file name to save the plot
+        pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
+        
+        for plot_num in range(severity_vector.shape[1]):
+            plot_x = np.linspace(1,severity_vector[:,plot_num].shape[0],severity_vector[:,plot_num].shape[0])
+            plot_y = severity_vector[:,plot_num]
+            plot_x = plot_x.reshape(plot_y.shape)
+            plot_severity(pltPdf, plot_x, plot_y) # places a plot page into the pdf file                              
+            plt.title('The bus voltage severity of contigency  %d' %(plot_num))
+        
+        pltPdf.close() # closes a pdf file
+     
+              
+        plot_x = np.linspace(1,severity_vector_sum.shape[0],severity_vector_sum.shape[0])
+        plot_y = severity_vector_sum
+        plot_x = plot_x.reshape(plot_y.shape)
+       
         
         dirplots = 'plots/' # must create this relative directory path before running
-        fnameplot = 'voltage_severity.pdf' # file name to save the plot
-        logging.info('Opening plot file: %s' %(os.path.join(dirplots,fnameplot)))
-        try:
-            pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
-            plot_severity_tf(pltPdf, dv_values, ks_values) # places a plot page into the pdf file
-            plot_severity_tf(pltPdf, dv_values, ks_values/2) # places a plot page into the pdf file
-            pltPdf.close() # closes a pdf file
-        except:
-            logging.error('Unexpected error occured:', sys.exc_info()[0])
-            raise
-        
+        fnameplot = 'voltage_severity3.pdf' # file name to save the plot
+        pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
+        plot_severity(pltPdf, plot_x, plot_y) # places a plot page into the pdf file
+        plt.title('The bus voltage severity of overall contigency')
+        pltPdf.close() # closes a pdf file
+        print('end')
+      
+
+
     # preparing for exit
     logging.shutdown()
