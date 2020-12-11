@@ -70,7 +70,7 @@ def calculate_voltage_severity(v, dv, ks, vnom=1.0):
 
 #%% plot severity transfer function
 def plot_severity_tf(pltPdf, dv, ks, title='Voltage Severity TF'):
-    fig, (ax0,ax1) = plt.subplots(nrows=2, ncols=1, figsize=(6.5,4.8), dpi=300,sharex=True) # , sharex=True
+    fig, ax0 = plt.subplots(nrows=1, ncols=1, figsize=(6.5,4.8), dpi=300) # , sharex=True
     plt.suptitle(title)
     temp = datetime.now()
     temp = temp.strftime("%m/%d/%Y, %H:%M:%S")
@@ -88,7 +88,7 @@ def plot_severity_tf(pltPdf, dv, ks, title='Voltage Severity TF'):
     ax0.set_ylabel('Severity [pu]')
     ax0.legend()
     #ax0.set_xlabel('Voltage [pu]')
-    ax1.set_xlabel('Voltage [pu]')
+    ax0.set_xlabel('Voltage [pu]')
     pltPdf.savefig() # saves figure to the pdf file scpecified by pltPdf
     plt.close() # Closes fig to clean up memory
     return

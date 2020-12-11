@@ -6,7 +6,7 @@ Created on Mon Nov 30 09:15:04 2020
 @author: jzb@achillearesearch.com; txia4@vols.utk.edu
 
 v1.21 TX20201303
-
+plot the voltage severity
 
 v1.2 TX20201202
 compute voltage severity for matrix 1

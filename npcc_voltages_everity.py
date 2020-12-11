@@ -4,6 +4,9 @@ Created on Sat Dec  5 16:45:06 2020
 
 @author: txia4@vols.utk.edu
 
+v1.3 TX20201211
+change the title of figures
+
 v1.2 TX20201210
 Save the file in PDF
 
@@ -95,6 +98,7 @@ def plot_severity(pltPdf, plot_x, plot_y, title=''):
     #ax0.set_xlabel('Voltage [pu]')
     ax0.set_xlabel('Iteration [pu]')
     pltPdf.savefig() # saves figure to the pdf file scpecified by pltPdf
+    plt.title(title)
     plt.close() # Closes fig to clean up memory
     return
     
@@ -129,7 +133,7 @@ if __name__ == "__main__":
         npMx1 = dfMx1.to_numpy()
         npMx1 = np.delete(npMx1, 0, axis=1)             # the first column is the iteration number so delete it
         bus_totalnum = npMx1.shape[1]
-        iteration_totalnum = 20
+        iteration_totalnum = 21
         contigency_totalnum = int(npMx1.shape[0]/iteration_totalnum)
         
         severity_matrix = calculate_voltage_severity(npMx1, dv_values, ks_values)
@@ -155,7 +159,8 @@ if __name__ == "__main__":
             plot_x = np.linspace(1,severity_vector[:,plot_num].shape[0],severity_vector[:,plot_num].shape[0])
             plot_y = severity_vector[:,plot_num]
             plot_x = plot_x.reshape(plot_y.shape)
-            plot_severity(pltPdf, plot_x, plot_y) # places a plot page into the pdf file                              
+            title_temp = 'The bus voltage severity of contigency  %d' %(plot_num+1)
+            plot_severity(pltPdf, plot_x, plot_y,title_temp) # places a plot page into the pdf file                              
             plt.title('The bus voltage severity of contigency  %d' %(plot_num))
         
         pltPdf.close() # closes a pdf file
@@ -169,8 +174,7 @@ if __name__ == "__main__":
         dirplots = 'plots/' # must create this relative directory path before running
         fnameplot = 'voltage_severity3.pdf' # file name to save the plot
         pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
-        plot_severity(pltPdf, plot_x, plot_y) # places a plot page into the pdf file
-        plt.title('The bus voltage severity of overall contigency')
+        plot_severity(pltPdf, plot_x, plot_y,'The bus voltage severity of overall contigency') # places a plot page into the pdf file
         pltPdf.close() # closes a pdf file
         print('end')
       
