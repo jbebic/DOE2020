@@ -4,8 +4,11 @@ Created on Sat Dec  5 16:45:06 2020
 
 @author: txia4@vols.utk.edu
 
+v1.4 TX20201214
+Add the reference of each figure
+
 v1.3 TX20201211
-change the title of figures
+Change the title of figures
 
 v1.2 TX20201210
 Save the file in PDF
@@ -90,19 +93,29 @@ def plot_severity(pltPdf, plot_x, plot_y, title=''):
     ax0.annotate(temp, (0.98,0.02), xycoords="figure fraction", horizontalalignment="right")
     
     ax0.plot(plot_x, plot_y, label='Vseverity')
+    plot_ref(ax0, ref_matrix)
 
     ax0.grid(True, which='both', axis='both')
     #ax0.set_ylim([0,0.3]) # when range not specified, the graph autoscales 
     ax0.set_ylabel('Severity [pu]')
-    ax0.legend()
+    ax0.legend(('Vseverity','0.90','0.92','0.95'))
     #ax0.set_xlabel('Voltage [pu]')
     ax0.set_xlabel('Iteration [pu]')
     pltPdf.savefig() # saves figure to the pdf file scpecified by pltPdf
     plt.title(title)
     plt.close() # Closes fig to clean up memory
     return
-    
 
+ #%%   
+def plot_ref(ax0, ref_matrix):
+    for i in range(ref_matrix.shape[1]):
+        plot_xref = np.linspace(1,ref_matrix.shape[0],ref_matrix.shape[0])
+        plot_yref = ref_matrix[:,i]
+        ax0.plot(plot_xref, plot_yref)
+    return
+        
+   
+    
 #%% Code testing
 if __name__ == "__main__":
 
@@ -139,6 +152,12 @@ if __name__ == "__main__":
         severity_matrix = calculate_voltage_severity(npMx1, dv_values, ks_values)
         severity_matrix = severity_matrix.reshape(npMx1.shape)
         
+        ref_val = np.array([0.9, 0.92, 0.95])
+        refMx1 = ref_val*np.ones((iteration_totalnum,ref_val.shape[0]))
+        ref_matrix = calculate_voltage_severity(refMx1, dv_values, ks_values)
+        ref_matrix = ref_matrix.reshape(refMx1.shape)
+        
+        
          # compute severity for each contigency
         weight_vector = np.matlib.ones((severity_matrix.shape[1],1))
         severity_vector = np.matlib.zeros((dfMx1.shape[0],1))
@@ -169,7 +188,7 @@ if __name__ == "__main__":
         plot_x = np.linspace(1,severity_vector_sum.shape[0],severity_vector_sum.shape[0])
         plot_y = severity_vector_sum
         plot_x = plot_x.reshape(plot_y.shape)
-       
+        ref_matrix = ref_matrix*contigency_totalnum       
         
         dirplots = 'plots/' # must create this relative directory path before running
         fnameplot = 'voltage_severity3.pdf' # file name to save the plot
