@@ -77,7 +77,7 @@ if __name__ == "__main__":
     # this supposedly shows where the file is, but it does not work for me
     # print(logging.getLoggerClass().root.handlers[0].baseFilename)
 
-    if True: # loading the contingency results
+    if False: # loading the contingency results
         dirin = 'results/'
         fnamein = '0v93_full_mx1.csv'
         
@@ -90,7 +90,7 @@ if __name__ == "__main__":
         # We can now pass the dfMx1 to a function that can calculate things based on the contingency data
         # for example the severity metric.
 
-    if False: # loading the matpower file
+    if True: # loading the matpower file
         dirin = 'cases/'
         fnamein = 'caseNPCC.m'
         
