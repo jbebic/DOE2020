@@ -4,6 +4,9 @@ Created on Tue Dec 15 10:21:12 2020
 
 @author: txia4@vols.utk.edu
 
+v1.3 TX20201222
+Delete the non-converge cases
+
 v1.2 TX20201220
 Computhe the cumulative severity of each contigency. The result is saved in powerflow_severity_cumulative.pdf
 Compute  the cumulative severity of all contigency. The result is saved in powerflow_severity_cumulative_sum.pdf
@@ -138,10 +141,13 @@ if __name__ == "__main__":
         npMx = dfMx.to_numpy()
         list_convergy = npMx[:,0]
         baseflow = npMx[0,:]
-        npMx2 = np.delete(npMx,[0],axis=1)
-        npMx2 = np.delete(npMx2,[0],axis=0)
+        nonconver_list = np.asarray(np.where(npMx[:,0]==0))
         
-    if False:  # plot contigency
+        npMx2 = np.delete(npMx,nonconver_list,axis=0)   #delete the nonconverge row
+        npMx2 = np.delete(npMx2,[0],axis=0)   #delete the base case row
+        npMx2 = np.delete(npMx2,[0],axis=1)   #delete the fisrt column
+        
+    if True:  # plot contigency
         dirplots = 'plots/' # must create this relative directory path before running
         fnameplot = 'powerflow_result.pdf' # file name to save the plot
         pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
@@ -156,7 +162,7 @@ if __name__ == "__main__":
             
         pltPdf.close() # closes a pdf file
         
-    if False:  # contigency severity 
+    if True:  # contigency severity 
        
         dirin = 'results/'
         fnamein = 'powerflow_limit.csv'
@@ -202,7 +208,7 @@ if __name__ == "__main__":
         # severity_matrix = calculate_powerflow_severity(npMx2_norm, dv_values, ks_values)
         severity_matrix = calculate_voltage_severity(npMx2_norm, dv_values, ks_values, vnom=0)
         severity_matrix = severity_matrix.reshape(npMx2_norm.shape)
-    if False:    
+    if True:    
         dirplots = 'plots/' # must create this relative directory path before running
         fnameplot = 'powerflow_severity_cumulative.pdf' # file name to save the plot
         pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
@@ -224,11 +230,11 @@ if __name__ == "__main__":
         pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
        
     
-        plot_x = np.linspace(1,severity_matrix[0,:].shape[0],severity_matrix[0,:].shape[0])
+        plot_x = np.linspace(1,severity_matrix[:,0].shape[0],severity_matrix[:,0].shape[0])
         plot_y = np.sum(severity_matrix, axis = 1)
         plot_x = plot_x.reshape(plot_y.shape)
         #plot_y = np.cumsum(plot_y, axis=0)
-        title_temp = 'The power flow severity of all contigency ' 
+        title_temp = 'The power flow severity of contigency on all line ' 
         plot_severity(pltPdf, plot_x, plot_y,title_temp) # places a plot page into the pdf file                              
             
         pltPdf.close() # closes a pdf file
