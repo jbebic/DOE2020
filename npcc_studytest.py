@@ -123,7 +123,6 @@ if __name__ == "__main__":
         plt.ylabel('bus voltage')
         plt.title('The bus voltage')
   
-        
         # We can now pass the dfMx1 to a function that can calculate things based on the contingency data
         # for example the severity metric.
 

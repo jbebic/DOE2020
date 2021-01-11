@@ -23,6 +23,8 @@ import os # operating system interface
 import andes
 from andes.core.var import BaseVar, Algeb, ExtAlgeb
 
+from vectorized_severity import calculate_voltage_severity
+
 #%% read_contingencies
 def read_cont_mx1(dirin, fname):
     df = pd.read_csv(os.path.join(dirin, fname))
@@ -38,7 +40,13 @@ def save_results(ss:andes.system, dirout:str, foutroot:str):
     fout = os.path.join(dirout,foutroot + '.vmag.csv')
     dfBus.loc[len(dfBus)] = ss.Bus.v.v
     dfBus.to_csv(fout, index=False)
-
+    
+    # calculating the number of engaged elements based on standard ANDES vars
+    temp = ss.ShuntSw.bs.v*ss.ShuntSw.ns.v # b*n, where b is an element's admittance and n is a number of elements
+    bav = np.array(np.sum(arr) for arr in temp) # total b avaialable on a given bus
+    ix = np.array(ss.ShuntSw.bus.v, dtype=int) # bus numbers of switched shunt devices
+    
+    
     return
 
 #%% save_rinputs
@@ -77,6 +85,74 @@ if __name__ == "__main__":
     # this supposedly shows where the file is, but it does not work for me
     # print(logging.getLoggerClass().root.handlers[0].baseFilename)
 
+    if True: # loading the npcc system model with shunt capacitors
+        dirin = 'cases/'
+        fnamein = 'caseNPCC.xlsx'
+        
+        dirout = 'output/' # output directory
+        foutroot = fnamein.replace('.xlsx', '')
+        # Solving the load flow with all shunt capacitors active
+
+		ss = andes.run(fnamein, input_path=dirin, output_path=dirout)
+		if ss.exit_code == 0: 
+			save_results(ss, dirout, foutroot)
+		else:
+			logging.info('Load flow did not converge with all switched shunts in service')
+
+		# 20210111 TODO: Tianwei
+		# intialize the numpy matrices to record the results
+		# create a for-loop that:
+		#   - applies a line outage
+		#   - solves the load flow
+		#   - adds bus voltages and line loadings as rows to the numpy matrices, but
+		#     checks for unconverged case and stuffs the row with np.nan
+		# 
+		# after the for-loop is done: 
+		# make dataframes from the numpy matrices and 
+		# save them into csv files.
+		# 
+		# 20210111 TODO: Jovan
+		# intialize the numpy matrices to record the results
+		# create a for-loop that:
+		#   - applies a generator outage
+		#   - rallocates the lost output to other generators as discussed in Daily Call Notes 20210111
+		#   - solves the load flow
+		#   - adds bus voltages and line loadings as rows to the numpy matrices, but
+		#     checks for unconverged case and stuffs the row with np.nan
+		# 
+		# after the for-loop is done: 
+		# make dataframes from the numpy matrices and 
+		# save them into csv files.
+		
+
+    if False: # loading the andes file with manually added switched capacitors
+        dirin = 'cases/'
+        fnamein = 'caseNPCC.xlsx'
+        
+        dirout = 'output/' # output directory
+        # ANDES output file names are derived from the input file name with an added suffix
+        # The suffix can be one or more of : _out.txt, _out.lst, _out.npz, _out_N.pdf
+        ss = andes.run(fnamein, input_path=dirin, output_path=dirout)
+        
+        # deriving the root name for output files based on the input file name
+        foutroot = fnamein.replace('.xlsx', '')
+        save_results(ss, dirout, foutroot)
+
+    if False: # extracting the buses with added capacitors
+        dirin = 'results/'
+        fnamein = '0v93_full_mx5.csv'
+        dfMx5 = read_cont_mx1(dirin, fnamein)
+        print()
+        print('The shape of Mx5 is (%d, %d)' %(dfMx5.shape[0], dfMx5.shape[1]))
+        # find columns with non-zero sums
+        df1 = dfMx5.sum(axis=0) 
+        ix = df1[df1.values != 0].index
+        busnums = [int(num.split('_')[1]) for num in ix.tolist()]
+        capcounts = df1.loc[ix].tolist()
+        print('Bus numbers: ', busnums)
+        print('Cap counts:  ', capcounts)
+        # Used this to set up the Excel file with switched shunt compensation
+        
     if False: # loading the contingency results
         dirin = 'results/'
         fnamein = '0v93_full_mx1.csv'
@@ -90,7 +166,7 @@ if __name__ == "__main__":
         # We can now pass the dfMx1 to a function that can calculate things based on the contingency data
         # for example the severity metric.
 
-    if True: # loading the matpower file
+    if False: # loading the matpower file
         dirin = 'cases/'
         fnamein = 'caseNPCC.m'
         
