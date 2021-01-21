@@ -93,11 +93,11 @@ if __name__ == "__main__":
         foutroot = fnamein.replace('.xlsx', '')
         # Solving the load flow with all shunt capacitors active
 
-		ss = andes.run(fnamein, input_path=dirin, output_path=dirout)
-		if ss.exit_code == 0: 
-			save_results(ss, dirout, foutroot)
-		else:
-			logging.info('Load flow did not converge with all switched shunts in service')
+        ss = andes.run(fnamein,input_path=dirin, output_path=dirout)
+        if ss.exit_code == 0: 
+            save_results(ss, dirout, foutroot)
+        else:
+            logging.info('Load flow did not converge with all switched shunts in service')
 
 		# 20210111 TODO: Tianwei
 		# intialize the numpy matrices to record the results

@@ -4,6 +4,15 @@ Created on Sat Dec  5 16:45:06 2020
 
 @author: txia4@vols.utk.edu
 
+v1.7 TX20210106
+change the title and label based on nomenclature 
+add Bus-voltage severity difference of full system part
+
+
+V1.6 TX20210105
+Add the nonconver case by the whtie stripe
+Correct the title
+
 v1.5 TX20201220
 Computhe the cumulative severity of each iteration. The result is saved in powerflow_severity_cumulative.pdf
 
@@ -89,22 +98,39 @@ def calculate_voltage_severity(v, dv, ks, vnom=1.0):
     severity = np.max(severity, axis = 0) # column-wise maximum of severity and the zero row
     return severity # this returns severity by bus.
 #%% 
-def plot_severity(pltPdf, plot_x, plot_y, title=''):
+def plot_severity(pltPdf, plot_x, plot_y, title='', xlabel='Contigency number',ylabel='Apparent Power Severity',ref = False, sort = False,step=False):
     fig, ax0 = plt.subplots(nrows=1, ncols=1, figsize=(6.5,4.8), dpi=300) # , sharex=True
     plt.suptitle(title)
     temp = datetime.now()
     temp = temp.strftime("%m/%d/%Y, %H:%M:%S")
     ax0.annotate(temp, (0.98,0.02), xycoords="figure fraction", horizontalalignment="right")
-    
-    ax0.plot(plot_x, plot_y, label='Vseverity')
-   # plot_ref(ax0, ref_matrix)
+    if step:
+        ax0.step(plot_x, plot_y, label='Vseverity')
+    else:
+        ax0.plot(plot_x, plot_y, label='Vseverity')
+    if sort:
+       dy = np.diff(plot_y.T).T
+       dys = np.sort(dy,axis=0)
+       plot_y2 = plot_y[0]+np.cumsum(dys)
+       plot_y2a = np.hstack((plot_y[0], plot_y2))
+       plot_y2b = plot_y2a.T
+       ax0.plot(plot_x, plot_y2b)
+       ax0.set_xticks(np.arange(0,22,2))
+ 
+    if ref:
+        plot_ref(ax0, ref_matrix)
+        ax0.set_xticks(np.arange(0,22,2))
 
     ax0.grid(True, which='both', axis='both')
     #ax0.set_ylim([0,0.3]) # when range not specified, the graph autoscales 
-    ax0.set_ylabel('Severity [pu]')
+    ax0.set_ylabel(ylabel)
+    
     ax0.legend(('Vseverity','0.90','0.92','0.95'))
+    if sort:
+        ax0.legend(('Original','Optimized','0.90','0.92','0.95'))
+        
     #ax0.set_xlabel('Voltage [pu]')
-    ax0.set_xlabel('Contigency number')
+    ax0.set_xlabel(xlabel)
     pltPdf.savefig() # saves figure to the pdf file scpecified by pltPdf
     plt.title(title)
     plt.close() # Closes fig to clean up memory
@@ -112,10 +138,12 @@ def plot_severity(pltPdf, plot_x, plot_y, title=''):
 
  #%%   
 def plot_ref(ax0, ref_matrix):
+    colorbase = ['r', 'g', 'm']
     for i in range(ref_matrix.shape[1]):
         plot_xref = np.linspace(1,ref_matrix.shape[0],ref_matrix.shape[0])
         plot_yref = ref_matrix[:,i]
-        ax0.plot(plot_xref, plot_yref)
+        c = colorbase[i]
+        ax0.plot(plot_xref, plot_yref,c)
     return
         
    
@@ -144,8 +172,8 @@ if __name__ == "__main__":
         logging.info('There are %d unique iteration numbers' %(len(dfMx1.iloc[:,0].unique())))
         
         # define the transfer function of severity (positive values only, non-decreasing)
-        dv_values = np.array([0.03, 0.08])
-        ks_values = np.array([1., 2.])
+        dv_values = np.array([0.03, 0.05, 0.08])
+        ks_values = np.array([5, 10, 15])
         
         npMx1 = dfMx1.to_numpy()
         npMx1 = np.delete(npMx1, 0, axis=1)             # the first column is the iteration number so delete it
@@ -175,7 +203,7 @@ if __name__ == "__main__":
  
     if False:    #plot the severity of different iteration under certain contigency
         dirplots = 'plots/' # must create this relative directory path before running
-        fnameplot = 'voltage_severity2.pdf' # file name to save the plot
+        fnameplot = 'Bus-voltage severity.pdf' # file name to save the plot
         pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
         
         for plot_num in range(severity_vector.shape[1]):
@@ -183,9 +211,9 @@ if __name__ == "__main__":
             plot_x = np.linspace(1,severity_vector[:,plot_num].shape[0],severity_vector[:,plot_num].shape[0])
             plot_y = severity_vector[:,plot_num]
             plot_x = plot_x.reshape(plot_y.shape)
-            title_temp = 'The bus voltage severity of contigency  %d' %(plot_num+1)
-            plot_severity(pltPdf, plot_x, plot_y,title_temp) # places a plot page into the pdf file                              
-            plt.title('The bus voltage severity of contigency  %d' %(plot_num))
+            title_temp = 'Line contigency # %d' %(plot_num+1)
+            plot_severity(pltPdf, plot_x, plot_y,title_temp,'Iteration number','Bus-voltage severity',ref = 1) # places a plot page into the pdf file                              
+            #plt.title('Line contigency # %d' %(plot_num))
         
         pltPdf.close() # closes a pdf file
      
@@ -196,15 +224,30 @@ if __name__ == "__main__":
         ref_matrix = ref_matrix*contigency_totalnum       
         
         dirplots = 'plots/' # must create this relative directory path before running
-        fnameplot = 'voltage_severity3.pdf' # file name to save the plot
+        fnameplot = 'Bus-voltage severity of full system.pdf' # file name to save the plot
         pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
-        plot_severity(pltPdf, plot_x, plot_y,'The bus voltage severity of overall contigency') # places a plot page into the pdf file
+        plot_severity(pltPdf, plot_x, plot_y,'Bus-voltage severity','Iteration number','Bus-voltage severity',ref=True) # places a plot page into the pdf file
+        plot_severity(pltPdf, plot_x, plot_y,'Bus-voltage severity','Iteration number','Bus-voltage severity',ref=True,sort=True) # places a plot page into the pdf file
+        pltPdf.close() # closes a pdf file
+        
+        plot_x = np.linspace(2,severity_vector_sum.shape[0],severity_vector_sum.shape[0]-1)
+        plot_y = -np.diff(severity_vector_sum.T).T
+        plot_x = plot_x.reshape(plot_y.shape)
+                  
+        dirplots = 'plots/' # must create this relative directory path before running
+        fnameplot = 'Bus-voltage severity difference of full system.pdf' # file name to save the plot
+        pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
+        plot_severity(pltPdf, plot_x, plot_y,'Bus-voltage severity','Iteration number','Bus-voltage severity') # places a plot page into the pdf file
+        
         pltPdf.close() # closes a pdf file
        
         
+       
+        
+        
     if True: # loading the contingency results and test voltage severtiy
         dirplots = 'plots/' # must create this relative directory path before running
-        fnameplot = 'voltage_severity_sum.pdf' # file name to save the plot
+        fnameplot = 'Bus-voltage severity sum.pdf' # file name to save the plot
         pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
         
         severity_matrix = numpy.nan_to_num(severity_matrix)
@@ -212,24 +255,36 @@ if __name__ == "__main__":
             plot_x = np.linspace(1,contigency_totalnum, contigency_totalnum)
             severity_matrix_piece = severity_matrix[iter_num*contigency_totalnum:(iter_num+1)*contigency_totalnum,:]
             plot_y = np.sum(severity_matrix_piece, axis = 1)
-            title_temp = 'The bus voltage severity of iter_num  %d' %(iter_num+1)
-            plot_severity(pltPdf, plot_x, plot_y,title_temp) # places a plot page into the pdf file  
+            title_temp = 'Iteration # %d' %(iter_num+1)
+            plot_severity(pltPdf, plot_x, plot_y,title_temp,'Contigency number','Bus-voltage severity',ref = False, sort = False,step=True) # places a plot page into the pdf file  
             
         pltPdf.close() # closes a pdf file
       
     if True: # plot heat map
+        
+        dirin = 'results/'
+        fnamein = 'contigency_apparentpower.csv'
+        dfMx = read_cont_mx1(dirin, fnamein)
+        npMx = dfMx.to_numpy()
+        nonconver_list = np.asarray(np.where(npMx[:,0]==0)) # get the nonconvergy list
+        
         try:
             dirplots = 'plots/' # must create this relative directory path before running
-            fnameplot = 'voltage_severity_heatmap.pdf' # file name to save the plot
+            fnameplot = 'Bus-voltage severity heatmap.pdf' # file name to save the plot
             pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
             
             
             for iter_num in range(iteration_totalnum):
-                severity_matrix_piece = severity_matrix[iter_num*contigency_totalnum:(iter_num+1)*contigency_totalnum,:]           
+                severity_matrix_piece = severity_matrix[iter_num*contigency_totalnum:(iter_num+1)*contigency_totalnum,:] 
+                severity_matrix_piece = numpy.nan_to_num(severity_matrix_piece)
+                nonconver_list = nonconver_list-2*np.ones(nonconver_list.shape)  # the matrix start from 0
+                nonconver_list[0,0] = nonconver_list[0,0]+1
+                nonconver_list = nonconver_list.astype('int64')
+                severity_matrix_piece[nonconver_list,:] = np.nan   #replace the nonconverge row
                 severity_matrix_piece_df = pd.DataFrame(severity_matrix_piece)
                 xymax = severity_matrix_piece_df.shape 
-                title = 'Heat map of voltage severity'
-                subtitle = 'Iteration %d case' %(iter_num+1)
+                title = 'Heat map of Bus-voltage severity'
+                subtitle = 'Iteration %d' %(iter_num+1)
                 output_continuous_heatmap_page(pltPdf, severity_matrix_piece_df, xymax, pagetitle=title, axistitle=subtitle)
             pltPdf.close() # closes a pdf file
         except:

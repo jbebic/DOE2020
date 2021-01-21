@@ -90,7 +90,7 @@ def output_continuous_heatmap_page(pltPdf,
     fig.colorbar(im0, ax=[ax0])
     ax0.set_xlabel(xylabels[0])
     ax0.set_ylabel(xylabels[1])
-    ax0.set_aspect('auto')
+    ax0.set_aspect('equal')
     
     pltPdf.savefig() # saves figure to the pdf file scpecified by pltPdf
     plt.close() # Closes fig to release memory
