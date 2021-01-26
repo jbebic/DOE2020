@@ -28,6 +28,7 @@ from andes.core.var import BaseVar, Algeb, ExtAlgeb
 
 from vectorized_severity import calculate_voltage_severity
 from npcc_powerflow_severity import read_cont_mx1
+from npcc_contigency_test import compute_lineapparentpower
 
 #%% find the link of two area | returen uid
 def area_num_detect(ss:andes.system,area1_num, area2_num):
@@ -99,8 +100,74 @@ if __name__ == "__main__":
         ss = andes.load(fnamein, setup=False)  # please change the path to case file. Note `setup=False`.
         connection_line = area_num_detect(ss,1,2)
         temp2 = sort_line(connection_line,npMx_limit)
-        islanding_case = islanding_list(ss)
+     
+    if True: #basic information study
+        
+        target_bus  = 38 - 1
+        select_bus = 3 - 1
 
+        #add a generator and let is work
+        
+        ss.add('PV', dict(bus=target_bus, p0=0, v0=1))
+        ss.setup()      # setup system      
+        ss.PFlow.run() # run power flow
+        
+        PVP = ss.PV.p.v
+        PVQ = ss.PV.q.v
+        PQP = ss.PQ.Ppf.v
+        PQQ = ss.PQ.Qpf.v
+        LineP = ss.Line.a1.e
+        
+        Total_gen = np.sum(PVP[0:8])
+        Total_load = np.sum(PQP[0:17])
+        Total_input = LineP[42]+LineP[99]
+        print('Total Generatorion = %f' %Total_gen)
+        print('Total Load = %f' %Total_load)
+        print('Total Input = %f' %Total_input)
+ 
+    if True: # here study the 
+        
+        factor_temp = 0.01    # reduce factor <=1
+        power_change = ss.PV.p0.v[select_bus] * factor_temp
+        # ss.PV.u.v[select_bus] = 0
+        ss.PV.u.v[-1] = 1          #activate the new generator
+        # ss.PV.pmax.v[select_bus] = ss.PV.pmax.v[select_bus] - power_change
+        ss.PV.p0.v[select_bus] = ss.PV.p0.v[select_bus] - power_change
+        ss.PV.p0.v[target_bus] = power_change
+        
+        line_total_num = 234-1
+        bus_total_num = 140
+        apparentpower_database = np.zeros((line_total_num,line_total_num))
+        busvoltage_database = np.zeros((line_total_num,bus_total_num))
+   
+        for line_con_num in range(line_total_num):
+            # print('Line contigency = %d' %line_con_num)
+            ss.Line.u.v[line_con_num] = 0  # `.v` is the property for values. always use in-place modification `[]`
+            #ss.conectivtiy
+            # use the continue
+            ss.connectivity()
+            if ss.Bus.n_islanded_buses:
+                logging.info('Contingency %d creates an island - skipping' %(line_con_num+1))
+                print('Contingency %d creates an island - skipping' %(line_con_num+1))
+                ss.Line.u.v[line_con_num] = 1
+                continue
+            else:
+                try:
+                    print('Line contigency = %d' %(line_con_num+1))
+                    # ss.setup()      # setup system      
+                    ss.PFlow.run() # run power flow
+                    # apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
+                    # bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
+                    # apparentpower_database[line_con_num,:] = apparent_power       
+                    # busvoltage_database[line_con_num,:] = bus_voltage 
+                except:
+                    # apparentpower_database[line_con_num,:] = np.nan
+                    # busvoltage_database[line_con_num,:] = np.nan
+                    logging.info('Load flow did not converge in contigency %d' %(line_con_num+1))
+                    print('Load flow did not converge in contigency %d' %(line_con_num+1))
+                ss.Line.u.v[line_con_num] = 1
+        
+  
         
     # preparing for exit
     logging.shutdown()
