@@ -19,6 +19,7 @@ import logging
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt # plotting
+import matplotlib.backends.backend_pdf as dpdf # pdf output
 
 from datetime import datetime # time stamps
 import os # operating system interface
@@ -29,6 +30,8 @@ from andes.core.var import BaseVar, Algeb, ExtAlgeb
 from vectorized_severity import calculate_voltage_severity
 from npcc_powerflow_severity import read_cont_mx1
 from npcc_contigency_test import compute_lineapparentpower
+from review_shunt_compensation import output_continuous_heatmap_page
+from npcc_contigency_test import save_database
 
 #%% find the link of two area | returen uid
 def area_num_detect(ss:andes.system,area1_num, area2_num):
@@ -103,8 +106,9 @@ if __name__ == "__main__":
      
     if True: #basic information study
         
-        target_bus  = 38 - 1
-        select_bus = 3 - 1
+        target_bus  = 39 - 1
+        # select_bus = 3 - 1
+        select_bus_list = np.array([1,2,3,4,5,6,7,8])-1
 
         #add a generator and let is work
         
@@ -127,48 +131,69 @@ if __name__ == "__main__":
  
     if True: # here study the 
         
-        factor_temp = 0.01    # reduce factor <=1
-        power_change = ss.PV.p0.v[select_bus] * factor_temp
-        # ss.PV.u.v[select_bus] = 0
-        ss.PV.u.v[-1] = 1          #activate the new generator
-        # ss.PV.pmax.v[select_bus] = ss.PV.pmax.v[select_bus] - power_change
-        ss.PV.p0.v[select_bus] = ss.PV.p0.v[select_bus] - power_change
-        ss.PV.p0.v[target_bus] = power_change
-        
+        #database initilization
         line_total_num = 234-1
         bus_total_num = 140
-        apparentpower_database = np.zeros((line_total_num,line_total_num))
-        busvoltage_database = np.zeros((line_total_num,bus_total_num))
-   
-        for line_con_num in range(line_total_num):
-            # print('Line contigency = %d' %line_con_num)
-            ss.Line.u.v[line_con_num] = 0  # `.v` is the property for values. always use in-place modification `[]`
-            #ss.conectivtiy
-            # use the continue
-            ss.connectivity()
-            if ss.Bus.n_islanded_buses:
-                logging.info('Contingency %d creates an island - skipping' %(line_con_num+1))
-                print('Contingency %d creates an island - skipping' %(line_con_num+1))
+        gen_area_toal_num = select_bus_list.shape[0]
+        apparentpower_database = np.zeros((gen_area_toal_num,line_total_num,line_total_num))
+        busvoltage_database = np.zeros((gen_area_toal_num,line_total_num,bus_total_num))
+        
+        # select_gen_num = 0
+        for select_gen_num in range(gen_area_toal_num):
+            
+            select_bus = select_bus_list[select_gen_num]
+            factor_temp = 1    # reduce factor <=1
+            power_change = ss.PV.p0.v[select_bus] * factor_temp
+            ss.PV.u.v[-1] = 1          #activate the new generator
+            ss.PV.p0.v[select_bus] = ss.PV.p0.v[select_bus] - power_change
+            ss.PV.p0.v[target_bus] = power_change
+            
+            for line_con_num in range(line_total_num):
+                # print('Line contigency = %d' %line_con_num)
+                ss.Line.u.v[line_con_num] = 0  # `.v` is the property for values. always use in-place modification `[]`
+                #ss.conectivtiy
+                # use the continue
+                ss.connectivity()
+                if ss.Bus.n_islanded_buses:
+                    logging.info('Contingency %d creates an island - skipping' %(line_con_num+1))
+                    print('Contingency %d creates an island - skipping' %(line_con_num+1))
+                    apparentpower_database[select_gen_num,line_con_num,:] = np.nan
+                    busvoltage_database[select_gen_num,line_con_num,:] = np.nan
+                    ss.Line.u.v[line_con_num] = 1
+                    continue
+                else:
+                    try:
+                        print('Line contigency = %d' %(line_con_num+1))
+                        # ss.setup()      # setup system      
+                        ss.PFlow.run() # run power flow
+                        apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
+                        bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
+                        apparentpower_database[select_gen_num,line_con_num,:] = apparent_power       
+                        busvoltage_database[select_gen_num,line_con_num,:] = bus_voltage
+                    except:
+                        # apparentpower_database[line_con_num,:] = np.nan
+                        # busvoltage_database[line_con_num,:] = np.nan
+                        logging.info('Load flow did not converge in contigency %d' %(line_con_num+1))
+                        print('Load flow did not converge in contigency %d' %(line_con_num+1))
                 ss.Line.u.v[line_con_num] = 1
-                continue
-            else:
-                try:
-                    print('Line contigency = %d' %(line_con_num+1))
-                    # ss.setup()      # setup system      
-                    ss.PFlow.run() # run power flow
-                    # apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
-                    # bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
-                    # apparentpower_database[line_con_num,:] = apparent_power       
-                    # busvoltage_database[line_con_num,:] = bus_voltage 
-                except:
-                    # apparentpower_database[line_con_num,:] = np.nan
-                    # busvoltage_database[line_con_num,:] = np.nan
-                    logging.info('Load flow did not converge in contigency %d' %(line_con_num+1))
-                    print('Load flow did not converge in contigency %d' %(line_con_num+1))
-                ss.Line.u.v[line_con_num] = 1
+            # let the power change to be zero and prepare for the next change of slect bus        
+            ss.PV.p0.v[select_bus] = ss.PV.p0.v[select_bus] + power_change
+            ss.PV.p0.v[target_bus] = 0
+      
+    if True:
+        dirout = 'output/' # output directory
+        foutroot = 'changecase_apparentpower'
+        apparentpower_database2 = apparentpower_database.reshape(-1,line_total_num)
+        save_database(apparentpower_database2, dirout, foutroot)
+        foutroot = 'changecase_busvoltage'
+        busvoltage_database2 = busvoltage_database.reshape(-1,bus_total_num)
+        save_database(busvoltage_database2, dirout, foutroot)
+        
+        apparentpower_database3 = apparentpower_database2.reshape(gen_area_toal_num,line_total_num,line_total_num)
+        busvoltage_database2 = busvoltage_database.reshape(gen_area_toal_num,line_total_num,bus_total_num)
         
   
-        
+    # flatten/reshape for saving data     
     # preparing for exit
     logging.shutdown()
     print('end')
