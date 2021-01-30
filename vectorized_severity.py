@@ -107,6 +107,19 @@ if __name__ == "__main__":
         # define the transfer function of severity (positive values only, non-decreasing)
         dv_values = np.array([0.03, 0.08])
         ks_values = np.array([1., 2.])
+        v_bus_mx = np.array([[0.92, 0.97, 1.01, 0.93],
+                             [1.03, 1.01, 0.95, 0.99 ]])
+        print(v_bus_mx.shape)
+        
+        temp = calculate_voltage_severity(v_bus_mx, dv_values, ks_values)
+        print(temp.shape)
+        v_sev_mx = temp.reshape(v_bus_mx.shape)
+        print(v_sev_mx.shape)
+        
+    if False:
+        # define the transfer function of severity (positive values only, non-decreasing)
+        dv_values = np.array([0.03, 0.08])
+        ks_values = np.array([1., 2.])
         # defining arbitrary voltages to evaluate 
         v_bus = np.array([0.91, 1.01, 0.94, 1.05, 1.1, 0.99]) 
         

@@ -24,6 +24,7 @@ from andes.core.var import BaseVar, Algeb, ExtAlgeb
 from vectorized_severity import calculate_voltage_severity
 from npcc_powerflow_severity import read_cont_mx1
 from review_shunt_compensation import output_continuous_heatmap_page
+from reconfigure_case import area_interface_lines_indices
 
 #%% Code testing
 if __name__ == "__main__":
@@ -74,12 +75,24 @@ if __name__ == "__main__":
         # nonconver_list = np.where(np.isnan(npMx_base_S[:,0]))
         #read the limit
         dirin = 'results/'
-        fnamein = 'powerflow_limit.csv'
-        dfMx_limit = read_cont_mx1(dirin, fnamein)
-        npMx_limit = dfMx_limit.to_numpy()
-        npMx_limit = np.dot(npMx_limit,0.01)
-        npMx_limit = npMx_limit.T
+        fnamein = 'line_loading_limits.csv'
+        # dfMx_limit = read_cont_mx1(dirin, fnamein)
+        # npMx_limit = dfMx_limit.to_numpy()
+        # npMx_limit = np.dot(npMx_limit,0.01)
+        # npMx_limit = npMx_limit.T
+        dfLineLims = read_cont_mx1(dirin, fnamein)
+        npMx_limit = dfLineLims['new_limit'].values/100
 
+        casedir = 'cases/'
+        casefile = 'caseNPCC_wAreas.xlsx'
+        outdir = 'results/'
+        ss = andes.load(casefile, input_path=casedir, setup=False)
+
+        il_idxs = area_interface_lines_indices(ss, 2)
+        il_lims = [npMx_limit[i] for i in il_idxs]
+        print('Interface line limits')
+        for name, lim in zip([ss.Line.name.v[i] for i in il_idxs], il_lims):
+            print('  %s: %f [pu]' %(name, lim))
     
         dv_values = np.array([0.8, 1.0, 1.25, 1.725])
         ks_values = np.array([5, 10, 15, 20])
@@ -95,10 +108,20 @@ if __name__ == "__main__":
         severity_matrix_base = severity_matrix_base.reshape(npMx_base_S_norm.shape)
         # temp = calculate_voltage_severity(npMx_base_S_norm, dv_values, ks_values, vnom=0)
         # severity_matrix_base = temp.reshape(npMx_base_S_norm.shape)
-        severity_matrix_base_df = pd.DataFrame(severity_matrix_base)
+        if False:
+            severity_matrix_base_df = pd.DataFrame(severity_matrix_base)
+            title = 'Line-loading severity, base case'
+        else:
+            severity_matrix_base_df = pd.DataFrame(npMx_base_S_norm)
+            title = 'Line-loading, base case'
         xymax = severity_matrix_base_df.shape 
-        title = 'Heat map of line-loading severity of base case'
-        output_continuous_heatmap_page(pltPdf, severity_matrix_base_df,xymax, xylabels = ['Contingency number', 'Line number'],pagetitle=title,crange=[0,1.6])        
+        output_continuous_heatmap_page(pltPdf, 
+                                       severity_matrix_base_df, 
+                                       xymax, 
+                                       xylabels = ['Contingency number', 'Line number'], 
+                                       pagetitle=title, 
+                                       crange=[0,2]
+                                       )        
         for select_gen_num in range(gen_area_toal_num):  
             
             npMx_change_S = apparentpower_database[select_gen_num,:,:]
@@ -107,9 +130,19 @@ if __name__ == "__main__":
             severity_matrix_change = calculate_voltage_severity(npMx_change_S_norm, dv_values, ks_values, vnom=0)
             severity_matrix_change = severity_matrix_change.reshape(npMx_change_S_norm.shape)           
             try:
-                severity_matrix_change_df = pd.DataFrame(severity_matrix_change)
-                title = 'Heat map of line-loading severity of change case %d' %(select_gen_num+1)
-                output_continuous_heatmap_page(pltPdf, severity_matrix_change_df,xymax, xylabels = ['Contingency number', 'Line number'],pagetitle=title,crange=[0,1.6])
+                if False:
+                    severity_matrix_change_df = pd.DataFrame(severity_matrix_change)
+                    title = 'Line-loading severity, change case %d' %(select_gen_num+1)
+                else:
+                    severity_matrix_change_df = pd.DataFrame(npMx_change_S_norm)
+                    title = 'Line-loading, change case %d' %(select_gen_num+1)
+                output_continuous_heatmap_page(pltPdf, 
+                                               severity_matrix_change_df, 
+                                               xymax, 
+                                               xylabels = ['Contingency number', 'Line number'], 
+                                               pagetitle=title, 
+                                               crange=[0,2]
+                                               )
               
             except:
                 logging.info('** something failed' )
@@ -137,7 +170,7 @@ if __name__ == "__main__":
         severity_matrix_base_df = pd.DataFrame(severity_matrix_base)
         xymax = severity_matrix_base_df.shape 
         title = 'Heat map of bus_voltage severity of base case'
-        output_continuous_heatmap_page(pltPdf, severity_matrix_base_df,xymax, xylabels = ['Contingency number', 'Line number'],pagetitle=title)
+        output_continuous_heatmap_page(pltPdf, severity_matrix_base_df,xymax, xylabels = ['Contingency number', 'Line number'], pagetitle=title)
         for select_gen_num in range(gen_area_toal_num):
             
             npMx_change_V = busvoltage_database[select_gen_num,:,:]
@@ -147,7 +180,7 @@ if __name__ == "__main__":
             try:
                 severity_matrix_change_df = pd.DataFrame(severity_matrix_change)
                 title = 'Heat map of bus_voltage severity of change case %d' %(select_gen_num+1)
-                output_continuous_heatmap_page(pltPdf, severity_matrix_change_df,xymax, xylabels = ['Contingency number', 'Line number'],pagetitle=title)
+                output_continuous_heatmap_page(pltPdf, severity_matrix_change_df, xymax, xylabels = ['Contingency number', 'Line number'], pagetitle=title)
             except:
                 logging.info('** something failed' )
         pltPdf.close() # closes a pdf file

@@ -23,13 +23,9 @@ v1.1 TX20201216
 There is no bug in saving files now
 compute the powerflow severity
 
-
-
 v1.0 TX20201215
 read the powerflow file. Plot the result
 There is a bug in saving files
-
-
 """
 
 
@@ -174,7 +170,7 @@ if __name__ == "__main__":
     if False:  # contigency severity 
        
         dirin = 'results/'
-        fnamein = 'powerflow_limit.csv'
+        fnamein = 'line_loading_limits.csv'
         dfMx_limit = read_cont_mx1(dirin, fnamein)
         npMx_limit = dfMx_limit.to_numpy()
         npMx_limit = npMx_limit.T
