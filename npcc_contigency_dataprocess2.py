@@ -67,7 +67,7 @@ if __name__ == "__main__":
         
         # converge_list_matpower is [1 14 15 16 17 20 25 33 34 47 48 57 60 110 111 113 117 139 141 194 208 233]-1
         # converge_list_andes is [1 2 16 17 20 22 25 33 34 39 48 110 111 113 117 194 233]
-        mannul_nonconver_list = [0,14,15,16,19,24,32,33,46,47,56,59,109,110,112,116,138,140,193,207,232]  
+        # mannul_nonconver_list = [0,14,15,16,19,24,32,33,46,47,56,59,109,110,112,116,138,140,193,207,232]  
 
  
     if True: # plot heat map of power
@@ -102,7 +102,7 @@ if __name__ == "__main__":
         fnameplot = 'Line-loading severity heatmap based on andes.pdf' # file name to save the plot
         pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
         
-        npMx_base_S[mannul_nonconver_list,:] = np.nan
+        # npMx_base_S[mannul_nonconver_list,:] = np.nan
         npMx_base_S_norm = npMx_base_S/npMx_limit
         severity_matrix_base = calculate_voltage_severity(npMx_base_S_norm, dv_values, ks_values, vnom=0)
         severity_matrix_base = severity_matrix_base.reshape(npMx_base_S_norm.shape)
@@ -125,7 +125,7 @@ if __name__ == "__main__":
         for select_gen_num in range(gen_area_toal_num):  
             
             npMx_change_S = apparentpower_database[select_gen_num,:,:]
-            npMx_change_S[mannul_nonconver_list,:] = np.nan
+            # npMx_change_S[mannul_nonconver_list,:] = np.nan
             npMx_change_S_norm = npMx_change_S/npMx_limit
             severity_matrix_change = calculate_voltage_severity(npMx_change_S_norm, dv_values, ks_values, vnom=0)
             severity_matrix_change = severity_matrix_change.reshape(npMx_change_S_norm.shape)           

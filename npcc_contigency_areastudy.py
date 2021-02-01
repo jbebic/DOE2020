@@ -156,7 +156,6 @@ if __name__ == "__main__":
         gen_area_total_num = len(area_gens_indices) # select_bus_list.shape[0]
         apparentpower_database = np.zeros((gen_area_total_num, line_total_num, line_total_num))
         busvoltage_database = np.zeros((gen_area_total_num, line_total_num, bus_total_num))
-        
         for ig, gen_ix in enumerate(area_gens_indices):
 
             # Replacing power displacement by a complete unit shutdown
@@ -180,9 +179,9 @@ if __name__ == "__main__":
                 # print('Line contigency = %d' %line_con_num)
                 ss.Line.u.v[line_con_num] = 0  # `.v` is the property for values. always use in-place modification `[]`
                 ss.connectivity() # look for islands
-                if ss.Bus.n_islanded_buses:
-                    logging.info('  Contingency on %s creates an island - skipping' %(ss.Line.name.v[line_con_num]))
-                    print('  Contingency on %s creates an island - skipping' %(ss.Line.name.v[line_con_num]))
+                if ss.Bus.island_sets:
+                    logging.info('  Contingency on %s creates islands - skipping' %(ss.Line.name.v[line_con_num]))
+                    print('  Contingency on %s creates islands - skipping' %(ss.Line.name.v[line_con_num]))
                     apparentpower_database[ig, line_con_num, :] = np.nan
                     busvoltage_database[ig, line_con_num, :] = np.nan
                     ss.Line.u.v[line_con_num] = 1
