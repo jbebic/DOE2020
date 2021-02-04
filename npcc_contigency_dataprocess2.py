@@ -21,10 +21,11 @@ import os # operating system interface
 import andes
 from andes.core.var import BaseVar, Algeb, ExtAlgeb
 
+from reconfigure_case import area_generators_indices,area_loads_indices
 from vectorized_severity import calculate_voltage_severity
 from npcc_powerflow_severity import read_cont_mx1
 from review_shunt_compensation import output_continuous_heatmap_page
-from reconfigure_case import area_interface_lines_indices
+from reconfigure_case import area_interface_lines_indices, area_generators_indices
 
 #%% Code testing
 if __name__ == "__main__":
@@ -32,14 +33,24 @@ if __name__ == "__main__":
     # If changing basicConfig, make sure to close the dedicated console; it will not take otherwise
     logging.basicConfig(filename='logs/DOE2020.log', filemode='w', 
                         format='%(levelname)s: %(message)s',
-                        level=logging.DEBUG)
+                        level=logging.INFO)
     
     if  True: # read the information from Matpower
         
-        line_total_num = 234-1
-        bus_total_num = 140
-        select_bus_list = np.array([1,2,3,4,5,6,7,8])-1
-        gen_area_toal_num = select_bus_list.shape[0] 
+
+        
+        casedir = 'cases/'
+        casefile = 'caseNPCC_wAreas.xlsx'
+        outdir = 'results/'
+        ss = andes.load(casefile, input_path=casedir, setup=False)
+        
+        
+        area_idx = 2
+        line_total_num = len(ss.Line.u.v)
+        bus_total_num = len(ss.Bus.u.v)
+        select_bus_list = area_generators_indices(ss, area_idx)
+        gen_area_toal_num = len(select_bus_list)
+        
     
     
         dirin = 'output/'
@@ -86,15 +97,15 @@ if __name__ == "__main__":
         casedir = 'cases/'
         casefile = 'caseNPCC_wAreas.xlsx'
         outdir = 'results/'
-        ss = andes.load(casefile, input_path=casedir, setup=False)
-
-        il_idxs = area_interface_lines_indices(ss, 2)
+        
+        print('generators in area ',area_generators_indices(ss,area_idx))
+        il_idxs = area_interface_lines_indices(ss, area_idx)
         il_lims = [npMx_limit[i] for i in il_idxs]
         print('Interface line limits')
         for name, lim in zip([ss.Line.name.v[i] for i in il_idxs], il_lims):
             print('  %s: %f [pu]' %(name, lim))
     
-        dv_values = np.array([0.8, 1.0, 1.25, 1.725])
+        dp_values = np.array([0.8, 1.0, 1.25, 1.725])
         ks_values = np.array([5, 10, 15, 20])
         
         
@@ -104,7 +115,7 @@ if __name__ == "__main__":
         
         # npMx_base_S[mannul_nonconver_list,:] = np.nan
         npMx_base_S_norm = npMx_base_S/npMx_limit
-        severity_matrix_base = calculate_voltage_severity(npMx_base_S_norm, dv_values, ks_values, vnom=0)
+        severity_matrix_base = calculate_voltage_severity(npMx_base_S_norm, dp_values, ks_values, vnom=0)
         severity_matrix_base = severity_matrix_base.reshape(npMx_base_S_norm.shape)
         # temp = calculate_voltage_severity(npMx_base_S_norm, dv_values, ks_values, vnom=0)
         # severity_matrix_base = temp.reshape(npMx_base_S_norm.shape)
@@ -127,7 +138,7 @@ if __name__ == "__main__":
             npMx_change_S = apparentpower_database[select_gen_num,:,:]
             # npMx_change_S[mannul_nonconver_list,:] = np.nan
             npMx_change_S_norm = npMx_change_S/npMx_limit
-            severity_matrix_change = calculate_voltage_severity(npMx_change_S_norm, dv_values, ks_values, vnom=0)
+            severity_matrix_change = calculate_voltage_severity(npMx_change_S_norm, dp_values, ks_values, vnom=0)
             severity_matrix_change = severity_matrix_change.reshape(npMx_change_S_norm.shape)           
             try:
                 if False:

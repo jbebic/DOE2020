@@ -28,7 +28,7 @@ import andes
 from andes.core.var import BaseVar, Algeb, ExtAlgeb
 
 from vectorized_severity import calculate_voltage_severity
-from reconfigure_case import area_generators_indices
+from reconfigure_case import area_generators_indices,area_loads_indices
 from npcc_powerflow_severity import read_cont_mx1
 from npcc_contigency_test import compute_lineapparentpower
 from review_shunt_compensation import output_continuous_heatmap_page
@@ -112,14 +112,13 @@ if __name__ == "__main__":
     ss.PFlow.config.max_iter = 100
     
     if True: 
-        # target_bus  = 39 - 1
-        # select_bus = 3 - 1
-        # select_bus_list = np.array([1,2,3,4,5,6,7,8])-1
-        # print(select_bus_list)
         
         # This selects all generators in the specified area (no need for manual lookup)
-        area_gens_indices = area_generators_indices(ss, 2)
+        area_idx = 2
+        area_gens_indices = area_generators_indices(ss, area_idx)
         print(area_gens_indices)
+        area_load_indices = area_loads_indices(ss, area_idx)
+        print(area_load_indices)
 
         #add a generator to target bus
         target_bus_idx = 39 # use the bus number as shown on the system map
@@ -141,14 +140,17 @@ if __name__ == "__main__":
         PQQ = ss.PQ.Qpf.v
         LineP = ss.Line.a1.e
         
-        Total_gen = np.sum(PVP[0:8])
-        Total_load = np.sum(PQP[0:17])
-        Total_import = LineP[42]+LineP[99]
+        Total_gen = np.sum(PVP[area_gens_indices])
+        Total_load = np.sum(PQP[area_load_indices])
+        Total_import = np.sum(LineP[connection_line])
         print('Total Generation = %f' %Total_gen)
         print('Total Load = %f' %Total_load)
         print('Total Import = %f' %Total_import)
  
     if True: # the generation displacement "inner loop" "
+        
+    
+    
         
         # database initialization
         line_total_num = len(ss.Line) # 234-1
@@ -225,6 +227,10 @@ if __name__ == "__main__":
         
         apparentpower_database3 = apparentpower_database2.reshape(gen_area_total_num,line_total_num,line_total_num)
         busvoltage_database2 = busvoltage_database.reshape(gen_area_total_num,line_total_num,bus_total_num)
+    
+    # if True:
+    #     a = 1
+        
         
   
     # flatten/reshape for saving data     
