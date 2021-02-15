@@ -130,6 +130,10 @@ if __name__ == "__main__":
                            )                      # 001 is the index of a displaced unit.
         newgen_ix = ss.PV.idx.v.index(newgen_idx)
         
+        # add a moving PQ bus
+        ss.add('PQ', dict(bus=10, p0=0.1, v0=1))
+        ss.PQ.u.v[-1] = 0 # set the last element to be 0
+        
         ss.setup()      # setup system      
         ss.PFlow.run()  # run power flow
 
@@ -146,46 +150,79 @@ if __name__ == "__main__":
         print('Total Generation = %f' %Total_gen)
         print('Total Load = %f' %Total_load)
         print('Total Import = %f' %Total_import)
+        
+        #save the data of N-0 starting case
+        StartingCase_BusV = ss.Bus.v.v
+        StartingCase_BusA = ss.Bus.a.v
  
     if True: # the generation displacement "inner loop" "
         
-    
-    
         
         # database initialization
         line_total_num = len(ss.Line) # 234-1
         bus_total_num = len(ss.Bus) # 140
         gen_area_total_num = len(area_gens_indices) # select_bus_list.shape[0]
-        apparentpower_database = np.zeros((gen_area_total_num, line_total_num, line_total_num))
-        busvoltage_database = np.zeros((gen_area_total_num, line_total_num, bus_total_num))
+        N1_apparentpower_database = np.zeros((gen_area_total_num, line_total_num, line_total_num))
+        N1_busvoltage_database = np.zeros((gen_area_total_num, line_total_num, bus_total_num))
+     
+        
         for ig, gen_ix in enumerate(area_gens_indices):
+            
+            # first loop: check the convergency
+            factor_list = np.arange(0.1,1.1,0.1)
+          
+            ss.PV.u.v[gen_ix] = 0 # disable the unit being displaced
+            ss.PQ.u.v[-1] = 1 # enable the virtual PQ bus
+            ss.PQ.bus.v[-1] = ss.PV.bus.v[gen_ix]
+            
+            for displacement_factor in factor_list:
+                
+                ppower_change = ss.PV.p0.v[gen_ix] * displacement_factor
+                qpower_change = ss.PV.q0.v[gen_ix] * displacement_factor
+                ss.PQ.p0.v[-1] = ss.PV.p0.v[gen_ix] - ppower_change
+                ss.PQ.q0.v[-1] = ss.PV.q0.v[gen_ix] - qpower_change
+                #change the parameter of new generator
+                ss.PV.p0.v[newgen_ix] = ppower_change
+                ss.PV.q0.v[newgen_ix] = qpower_change
+               
+                print('Displacing %f pu power from generator %s' %(ppower_change, ss.PV.name.v[gen_ix]))
+                
+                ss.PFlow.init() # helps with the initial guess
+                ss.PFlow.run() # run power flow
+                
+                logging.info('Displacing unit %s' %(ss.PV.name.v[ig]))
+                
+                #update the intial guess
+                ss.Bus.v0.v[:] = ss.Bus.v.v
+                ss.Bus.a0.v[:] = ss.Bus.a.v
+                
 
+           
             # Replacing power displacement by a complete unit shutdown
             # displacement_factor = 1    # reduce factor <=1
-            # power_change = ss.PV.p0.v[select_bus] * displacement_factor
-            # print('Displacing %f pu power from generator %s' %(power_change, ss.PV.name.v[select_bus]))
-            # logging.info('Displacing %f pu power from generator %s' %(power_change, ss.PV.name.v[select_bus]))
-            # # ss.PV.u.v[-1] = 1          # activate the new generator
-            # ss.PV.p0.v[select_bus] = ss.PV.p0.v[select_bus] - power_change
-            # ss.PV.p0.v[target_bus] = power_change
-            logging.info('Displacing unit %s' %(ss.PV.name.v[ig]))
-            print('Displacing unit %s' %(ss.PV.name.v[ig]))
-
-            ss.PV.p0.v[newgen_ix] = ss.PV.p.v[gen_ix] # set initial power output of the added generator equal to power output of the displaced one.
+            
             ss.PV.u.v[gen_ix] = 0 # disable the unit being displaced
-            ss.PV.u.v[newgen_ix] = 1 # enable the substitute unit
-            ss.PFlow.init()
-            ss.PFlow.run() # run power flow
+            ss.PQ.u.v[-1] = 0 # disable the virtual PQ bus 
+            ss.PV.u.v[newgen_ix] = 1 # enable the substitute unit. Already enabled. Do it again for safe.
+            ss.PV.p0.v[newgen_ix] = ss.PV.p.v[gen_ix] # set initial power output of the added generator equal to power output of the displaced one. 
+            print('Displacing unit %s' %(ss.PV.name.v[ig]))     
+            
+            # we do not need to change the intial guess here becuase it is not a hard copy
+            # ss.PFlow.init()
+            # ss.PFlow.run() # run power flow
+            N0_apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
+            N0_bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
             
             for line_con_num in range(line_total_num):
                 # print('Line contigency = %d' %line_con_num)
                 ss.Line.u.v[line_con_num] = 0  # `.v` is the property for values. always use in-place modification `[]`
                 ss.connectivity() # look for islands
-                if ss.Bus.island_sets:
+                # if ss.Bus.island_sets:
+                if len(ss.Bus.islands) > 1:
                     logging.info('  Contingency on %s creates islands - skipping' %(ss.Line.name.v[line_con_num]))
                     print('  Contingency on %s creates islands - skipping' %(ss.Line.name.v[line_con_num]))
-                    apparentpower_database[ig, line_con_num, :] = np.nan
-                    busvoltage_database[ig, line_con_num, :] = np.nan
+                    N1_apparentpower_database[ig, line_con_num, :] = np.nan
+                    N1_busvoltage_database[ig, line_con_num, :] = np.nan
                     ss.Line.u.v[line_con_num] = 1
                     continue
                 else:
@@ -197,13 +234,13 @@ if __name__ == "__main__":
                         if ss.PFlow.converged:
                             apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
                             bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
-                            apparentpower_database[ig,line_con_num,:] = apparent_power
-                            busvoltage_database[ig,line_con_num,:] = bus_voltage
+                            N1_apparentpower_database[ig,line_con_num,:] = apparent_power
+                            N1_busvoltage_database[ig,line_con_num,:] = bus_voltage
                         else:
                             logging.info('  Load flow did not converge for contigency on %s' %(ss.Line.name.v[line_con_num]))
                             print('  Load flow did not converge for contigency on %s' %(ss.Line.name.v[line_con_num]))
-                            apparentpower_database[ig, line_con_num, :] = np.nan
-                            busvoltage_database[ig, line_con_num, :] = np.nan
+                            N1_apparentpower_database[ig, line_con_num, :] = np.nan
+                            N1_busvoltage_database[ig, line_con_num, :] = np.nan
                     except:
                         # apparentpower_database[line_con_num,:] = np.nan
                         # busvoltage_database[line_con_num,:] = np.nan
@@ -211,25 +248,26 @@ if __name__ == "__main__":
                         print('  Load flow did not solve for contigency on %s' %(ss.Line.name.v[line_con_num]))
                 ss.Line.u.v[line_con_num] = 1
             # let the power change to be zero and prepare for the next change of slect bus        
-            # ss.PV.p0.v[gen_ix] = ss.PV.p0.v[gen_ix] + power_change
-            # ss.PV.p0.v[target_bus] = 0
+           
+            
             ss.PV.u.v[gen_ix] = 1 # re-enable the original unit
             ss.PV.u.v[newgen_ix] = 0 # disable the replacement unit
+            #restore the intial guess
+            ss.Bus.v0.v[:] = StartingCase_BusV
+            ss.Bus.a0.v[:] = StartingCase_BusA
       
     if True:
         dirout = 'output/' # output directory
         foutroot = 'changecase_apparentpower'
-        apparentpower_database2 = apparentpower_database.reshape(-1,line_total_num)
-        save_database(apparentpower_database2, dirout, foutroot)
+        N1_apparentpower_database2 = N1_apparentpower_database.reshape(-1,line_total_num)
+        save_database(N1_apparentpower_database2, dirout, foutroot)
         foutroot = 'changecase_busvoltage'
-        busvoltage_database2 = busvoltage_database.reshape(-1,bus_total_num)
-        save_database(busvoltage_database2, dirout, foutroot)
+        N1_busvoltage_database2 = N1_busvoltage_database.reshape(-1,bus_total_num)
+        save_database(N1_busvoltage_database2, dirout, foutroot)
         
-        apparentpower_database3 = apparentpower_database2.reshape(gen_area_total_num,line_total_num,line_total_num)
-        busvoltage_database2 = busvoltage_database.reshape(gen_area_total_num,line_total_num,bus_total_num)
+        N1_apparentpower_database3 = N1_apparentpower_database2.reshape(gen_area_total_num,line_total_num,line_total_num)
+        N1_busvoltage_database2 = N1_busvoltage_database.reshape(gen_area_total_num,line_total_num,bus_total_num)
     
-    # if True:
-    #     a = 1
         
         
   
