@@ -162,9 +162,8 @@ if __name__ == "__main__":
         line_total_num = len(ss.Line) # 234-1
         bus_total_num = len(ss.Bus) # 140
         gen_area_total_num = len(area_gens_indices) # select_bus_list.shape[0]
-        N1_apparentpower_database = np.zeros((gen_area_total_num, line_total_num, line_total_num))
-        N1_busvoltage_database = np.zeros((gen_area_total_num, line_total_num, bus_total_num))
-     
+        N1_apparentpower_database = np.zeros((gen_area_total_num, line_total_num+1, line_total_num)) # +1 to hold N-0 solution
+        N1_busvoltage_database = np.zeros((gen_area_total_num, line_total_num+1, bus_total_num)) # ditto
         
         for ig, gen_ix in enumerate(area_gens_indices):
             
@@ -210,8 +209,10 @@ if __name__ == "__main__":
             # we do not need to change the intial guess here becuase it is not a hard copy
             # ss.PFlow.init()
             # ss.PFlow.run() # run power flow
-            N0_apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
-            N0_bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
+            apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
+            bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
+            N1_apparentpower_database[ig,0,:] = apparent_power # saving N-0 solution
+            N1_busvoltage_database[ig,0,:] = bus_voltage # ditto
             
             for line_con_num in range(line_total_num):
                 # print('Line contigency = %d' %line_con_num)
@@ -221,8 +222,8 @@ if __name__ == "__main__":
                 if len(ss.Bus.islands) > 1:
                     logging.info('  Contingency on %s creates islands - skipping' %(ss.Line.name.v[line_con_num]))
                     print('  Contingency on %s creates islands - skipping' %(ss.Line.name.v[line_con_num]))
-                    N1_apparentpower_database[ig, line_con_num, :] = np.nan
-                    N1_busvoltage_database[ig, line_con_num, :] = np.nan
+                    N1_apparentpower_database[ig, line_con_num+1, :] = np.nan # +1 to account for N-0 solution
+                    N1_busvoltage_database[ig, line_con_num+1, :] = np.nan # ditto
                     ss.Line.u.v[line_con_num] = 1
                     continue
                 else:
@@ -234,13 +235,13 @@ if __name__ == "__main__":
                         if ss.PFlow.converged:
                             apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
                             bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
-                            N1_apparentpower_database[ig,line_con_num,:] = apparent_power
-                            N1_busvoltage_database[ig,line_con_num,:] = bus_voltage
+                            N1_apparentpower_database[ig,line_con_num+1,:] = apparent_power # +1 to account for N-0 solution
+                            N1_busvoltage_database[ig,line_con_num+1,:] = bus_voltage # ditto
                         else:
                             logging.info('  Load flow did not converge for contigency on %s' %(ss.Line.name.v[line_con_num]))
                             print('  Load flow did not converge for contigency on %s' %(ss.Line.name.v[line_con_num]))
-                            N1_apparentpower_database[ig, line_con_num, :] = np.nan
-                            N1_busvoltage_database[ig, line_con_num, :] = np.nan
+                            N1_apparentpower_database[ig, line_con_num+1, :] = np.nan # +1 to account for N-0 solution
+                            N1_busvoltage_database[ig, line_con_num+1, :] = np.nan # ditto
                     except:
                         # apparentpower_database[line_con_num,:] = np.nan
                         # busvoltage_database[line_con_num,:] = np.nan
@@ -265,13 +266,17 @@ if __name__ == "__main__":
         N1_busvoltage_database2 = N1_busvoltage_database.reshape(-1,bus_total_num)
         save_database(N1_busvoltage_database2, dirout, foutroot)
         
-        N1_apparentpower_database3 = N1_apparentpower_database2.reshape(gen_area_total_num,line_total_num,line_total_num)
-        N1_busvoltage_database2 = N1_busvoltage_database.reshape(gen_area_total_num,line_total_num,bus_total_num)
-    
-        
-        
-  
-    # flatten/reshape for saving data     
+        # reshape line flows and bus voltages into 2D data structures
+        N1_flows = N1_apparentpower_database.reshape(gen_area_total_num * (line_total_num+1), line_total_num) # +1 to account for N-0 solution
+        N1_voltages = N1_busvoltage_database.reshape(gen_area_total_num * (line_total_num+1), bus_total_num) # ditto
+        # prepend an index column to the 2d data structures to denote the idx of each moved generator
+        gidx = [ss.PV.idx.v[i] for i in area_gens_indices] #  extract idxs of all generators in the area
+        N1_index = np.repeat(gidx, line_total_num+1).reshape(-1,1) # expand it to match the 2d solution arrays, then turn into a column-vector
+        temp = np.hstack((N1_index,N1_flows)) # prepend the index column to line flows
+        save_database(temp, dirout, 'line_flows') # save line flows
+        temp = np.hstack((N1_index,N1_voltages)) # prepend the index column to bus voltages 
+        save_database(temp, dirout, 'bus_voltages') # save it
+
     # preparing for exit
     logging.shutdown()
     print('end')
