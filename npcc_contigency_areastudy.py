@@ -131,8 +131,14 @@ if __name__ == "__main__":
         newgen_ix = ss.PV.idx.v.index(newgen_idx)
         
         # add a moving PQ bus
-        ss.add('PQ', dict(bus=10, p0=0.1, v0=1))
-        ss.PQ.u.v[-1] = 0 # set the last element to be 0
+        Total_PQ = len(ss.PQ.u.v)           # w
+        for i in area_gens_indices:
+            ss.add('PQ', dict(bus=ss.PV.bus.v[i], p0=0, v0=1,u=0))
+            
+        # check the result
+        print(ss.PV.bus.v)
+        print(ss.PQ.bus.v)
+        print(ss.PQ.u.v)
         
         ss.setup()      # setup system      
         ss.PFlow.run()  # run power flow
@@ -162,8 +168,53 @@ if __name__ == "__main__":
         line_total_num = len(ss.Line) # 234-1
         bus_total_num = len(ss.Bus) # 140
         gen_area_total_num = len(area_gens_indices) # select_bus_list.shape[0]
-        N1_apparentpower_database = np.zeros((gen_area_total_num, line_total_num+1, line_total_num)) # +1 to hold N-0 solution
-        N1_busvoltage_database = np.zeros((gen_area_total_num, line_total_num+1, bus_total_num)) # ditto
+        N1_apparentpower_database = np.zeros((gen_area_total_num+1, line_total_num+1, line_total_num)) #first +1 to hold the original case;second +1 to hold N-0 solution
+        N1_busvoltage_database = np.zeros((gen_area_total_num+1, line_total_num+1, bus_total_num)) # ditto
+        
+        # here is the N-1 contigency study for the base original case without displacement
+        ss.PFlow.init() # helps with the initial guess
+        ss.PFlow.run() # run power flow
+        apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
+        bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
+        N1_apparentpower_database[0,0,:] = apparent_power # saving N-0 solution
+        N1_busvoltage_database[0,0,:] = bus_voltage # ditto
+        
+        for line_con_num in range(line_total_num):
+                # print('Line contigency = %d' %line_con_num)
+                ss.Line.u.v[line_con_num] = 0  # `.v` is the property for values. always use in-place modification `[]`
+                ss.connectivity() # look for islands
+                # if ss.Bus.island_sets:
+                if len(ss.Bus.islands) > 1:
+                    logging.info('  Contingency on %s creates islands - skipping' %(ss.Line.name.v[line_con_num]))
+                    print('  Contingency on %s creates islands - skipping' %(ss.Line.name.v[line_con_num]))
+                    N1_apparentpower_database[0, line_con_num+1, :] = np.nan # +1 to account for N-0 solution
+                    N1_busvoltage_database[0, line_con_num+1, :] = np.nan # ditto
+                    ss.Line.u.v[line_con_num] = 1
+                    continue
+                else:
+                    try:
+                        # print('Line contigency = %d' %(line_con_num+1))
+                        # ss.setup()      # setup system
+                        ss.PFlow.init() # helps with the initial guess
+                        ss.PFlow.run() # run power flow
+                        if ss.PFlow.converged:
+                            apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
+                            bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
+                            N1_apparentpower_database[0,line_con_num+1,:] = apparent_power # +1 to account for N-0 solution
+                            N1_busvoltage_database[0,line_con_num+1,:] = bus_voltage # ditto
+                        else:
+                            logging.info('  Load flow did not converge for contingency on %s' %(ss.Line.name.v[line_con_num]))
+                            print('  Load flow did not converge for contingency on %s' %(ss.Line.name.v[line_con_num]))
+                            N1_apparentpower_database[0, line_con_num+1, :] = 9999.9 # +1 to account for N-0 solution
+                            N1_busvoltage_database[0, line_con_num+1, :] = 9999.9 # ditto
+                    except:
+                        # apparentpower_database[line_con_num,:] = np.nan
+                        # busvoltage_database[line_con_num,:] = np.nan
+                        logging.info('  Load flow did not solve for contigency on %s' %(ss.Line.name.v[line_con_num]))
+                        print('  Load flow did not solve for contigency on %s' %(ss.Line.name.v[line_con_num]))
+                ss.Line.u.v[line_con_num] = 1
+        
+        # here is the displacment case
         
         for ig, gen_ix in enumerate(area_gens_indices):
             
@@ -171,8 +222,8 @@ if __name__ == "__main__":
             factor_list = np.arange(0.1,1.1,0.1)
           
             ss.PV.u.v[gen_ix] = 0 # disable the unit being displaced
-            ss.PQ.u.v[-1] = 1 # enable the virtual PQ bus
-            ss.PQ.bus.v[-1] = ss.PV.bus.v[gen_ix]
+            ss.PQ.u.v[Total_PQ+ig] = 1 # enable the virtual PQ bus
+            ss.PQ.bus.v[Total_PQ+ig] = ss.PV.bus.v[gen_ix]
             
             for displacement_factor in factor_list:
                 
@@ -201,7 +252,7 @@ if __name__ == "__main__":
             # displacement_factor = 1    # reduce factor <=1
             
             ss.PV.u.v[gen_ix] = 0 # disable the unit being displaced
-            ss.PQ.u.v[-1] = 0 # disable the virtual PQ bus 
+            ss.PQ.u.v[Total_PQ+ig] = 0 # disable the virtual PQ bus 
             ss.PV.u.v[newgen_ix] = 1 # enable the substitute unit. Already enabled. Do it again for safe.
             ss.PV.p0.v[newgen_ix] = ss.PV.p.v[gen_ix] # set initial power output of the added generator equal to power output of the displaced one. 
             print('Displacing unit %s' %(ss.PV.name.v[ig]))     
@@ -211,19 +262,19 @@ if __name__ == "__main__":
             # ss.PFlow.run() # run power flow
             apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
             bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
-            N1_apparentpower_database[ig,0,:] = apparent_power # saving N-0 solution
-            N1_busvoltage_database[ig,0,:] = bus_voltage # ditto
+            N1_apparentpower_database[ig+1,0,:] = apparent_power # saving N-0 solution
+            N1_busvoltage_database[ig+1,0,:] = bus_voltage # ditto
             
             for line_con_num in range(line_total_num):
-                # print('Line contigency = %d' %line_con_num)
+                # print('Line contingency = %d' %line_con_num)
                 ss.Line.u.v[line_con_num] = 0  # `.v` is the property for values. always use in-place modification `[]`
                 ss.connectivity() # look for islands
                 # if ss.Bus.island_sets:
                 if len(ss.Bus.islands) > 1:
                     logging.info('  Contingency on %s creates islands - skipping' %(ss.Line.name.v[line_con_num]))
                     print('  Contingency on %s creates islands - skipping' %(ss.Line.name.v[line_con_num]))
-                    N1_apparentpower_database[ig, line_con_num+1, :] = np.nan # +1 to account for N-0 solution
-                    N1_busvoltage_database[ig, line_con_num+1, :] = np.nan # ditto
+                    N1_apparentpower_database[ig+1, line_con_num+1, :] = np.nan # +1 to account for N-0 solution
+                    N1_busvoltage_database[ig+1, line_con_num+1, :] = np.nan # ditto
                     ss.Line.u.v[line_con_num] = 1
                     continue
                 else:
@@ -235,18 +286,18 @@ if __name__ == "__main__":
                         if ss.PFlow.converged:
                             apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
                             bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
-                            N1_apparentpower_database[ig,line_con_num+1,:] = apparent_power # +1 to account for N-0 solution
-                            N1_busvoltage_database[ig,line_con_num+1,:] = bus_voltage # ditto
+                            N1_apparentpower_database[ig+1,line_con_num+1,:] = apparent_power # +1 to account for N-0 solution
+                            N1_busvoltage_database[ig+1,line_con_num+1,:] = bus_voltage # ditto
                         else:
-                            logging.info('  Load flow did not converge for contigency on %s' %(ss.Line.name.v[line_con_num]))
-                            print('  Load flow did not converge for contigency on %s' %(ss.Line.name.v[line_con_num]))
-                            N1_apparentpower_database[ig, line_con_num+1, :] = np.nan # +1 to account for N-0 solution
-                            N1_busvoltage_database[ig, line_con_num+1, :] = np.nan # ditto
+                            logging.info('  Load flow did not converge for contingency on %s' %(ss.Line.name.v[line_con_num]))
+                            print('  Load flow did not converge for contingency on %s' %(ss.Line.name.v[line_con_num]))
+                            N1_apparentpower_database[ig+1, line_con_num+1, :] = 9999.9 # +1 to account for N-0 solution
+                            N1_busvoltage_database[ig+1, line_con_num+1, :] = 9999.9 # ditto
                     except:
                         # apparentpower_database[line_con_num,:] = np.nan
                         # busvoltage_database[line_con_num,:] = np.nan
-                        logging.info('  Load flow did not solve for contigency on %s' %(ss.Line.name.v[line_con_num]))
-                        print('  Load flow did not solve for contigency on %s' %(ss.Line.name.v[line_con_num]))
+                        logging.info('  Load flow did not solve for contingency on %s' %(ss.Line.name.v[line_con_num]))
+                        print('  Load flow did not solve for contingency on %s' %(ss.Line.name.v[line_con_num]))
                 ss.Line.u.v[line_con_num] = 1
             # let the power change to be zero and prepare for the next change of slect bus        
            
@@ -267,10 +318,11 @@ if __name__ == "__main__":
         save_database(N1_busvoltage_database2, dirout, foutroot)
         
         # reshape line flows and bus voltages into 2D data structures
-        N1_flows = N1_apparentpower_database.reshape(gen_area_total_num * (line_total_num+1), line_total_num) # +1 to account for N-0 solution
-        N1_voltages = N1_busvoltage_database.reshape(gen_area_total_num * (line_total_num+1), bus_total_num) # ditto
+        N1_flows = N1_apparentpower_database.reshape((gen_area_total_num+1) * (line_total_num+1), line_total_num) # +1 to account for N-0 solution
+        N1_voltages = N1_busvoltage_database.reshape((gen_area_total_num+1) * (line_total_num+1), bus_total_num) # ditto
         # prepend an index column to the 2d data structures to denote the idx of each moved generator
         gidx = [ss.PV.idx.v[i] for i in area_gens_indices] #  extract idxs of all generators in the area
+        gidx = np.hstack(([0],gidx)) # add 0 for the original case
         N1_index = np.repeat(gidx, line_total_num+1).reshape(-1,1) # expand it to match the 2d solution arrays, then turn into a column-vector
         temp = np.hstack((N1_index,N1_flows)) # prepend the index column to line flows
         save_database(temp, dirout, 'line_flows') # save line flows
