@@ -68,17 +68,17 @@ if __name__ == "__main__":
     if True: # loading the npcc system model with shunt capacitors
         
         dirin = 'cases/'
-        fnamein = 'caseNPCC.xlsx'
+        fnamein = 'caseNPCC_wAreas.xlsx'
         dirout = 'output/' # output directory
         foutroot = fnamein.replace('.xlsx', '')
         # Solving the load flow with all shunt capacitors active
         # andes.main.config_logger()       
-        ss = andes.load(fnamein, setup=False)  # please change the path to case file. Note `setup=False`.
+        ss = andes.load(fnamein,input_path=dirin,  setup=False)  # please change the path to case file. Note `setup=False`.
         line_total_num = 234-1
         bus_total_num = 140
         apparentpower_database = np.zeros((line_total_num,line_total_num))
         busvoltage_database = np.zeros((line_total_num,bus_total_num))
-        ss.ShuntSw.u.v = np.zeros_like(ss.ShuntSw.u.v).tolist()
+        # ss.ShuntSw.u.v = np.zeros_like(ss.ShuntSw.u.v).tolist()
         for line_con_num in range(line_total_num):
             ss.Line.u.v[line_con_num] = 0  # `.v` is the property for values. always use in-place modification `[]`
             try:

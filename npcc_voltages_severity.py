@@ -98,17 +98,17 @@ def calculate_voltage_severity(v, dv, ks, vnom=1.0):
     severity = np.max(severity, axis = 0) # column-wise maximum of severity and the zero row
     return severity # this returns severity by bus.
 #%% 
-def plot_severity(pltPdf, plot_x, plot_y, y2=None, title='', xlabel='Contigency number',ylabel='Apparent Power Severity',ref = False, sort = False,step=False):
+def plot_severity(pltPdf, plot_x, plot_y, y2=None,ylims=None, title='', xlabel='Contigency number',ylabel='Apparent Power Severity',ref = False, sort = False,step=False):
     fig, ax0 = plt.subplots(nrows=1, ncols=1, figsize=(6.5,4.8), dpi=300) # , sharex=True
     plt.suptitle(title)
     temp = datetime.now()
     temp = temp.strftime("%m/%d/%Y, %H:%M:%S")
     ax0.annotate(temp, (0.98,0.02), xycoords="figure fraction", horizontalalignment="right")
     if step:
-        ax0.step(plot_x, plot_y, label='Vseverity')
+        ax0.step(plot_x, plot_y)
         if y2 is not None: ax0.step(plot_x, y2, label='y2')
     else:
-        ax0.plot(plot_x, plot_y, label='Vseverity')
+        ax0.plot(plot_x, plot_y)
         if y2 is not None: ax0.step(plot_x, y2, label='y2')
     if sort:
        dy = np.diff(plot_y.T).T
@@ -126,8 +126,8 @@ def plot_severity(pltPdf, plot_x, plot_y, y2=None, title='', xlabel='Contigency 
     ax0.grid(True, which='both', axis='both')
     #ax0.set_ylim([0,0.3]) # when range not specified, the graph autoscales 
     ax0.set_ylabel(ylabel)
-    
-    ax0.legend(('Vseverity','0.90','0.92','0.95'))
+    if ylims is not None: ax0.set_ylim(ylims)
+    # ax0.legend(('Vseverity','0.90','0.92','0.95'))
     if sort:
         ax0.legend(('Original','Optimized','0.90','0.92','0.95'))
         
