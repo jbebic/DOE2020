@@ -1,19 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jan 19 09:39:16 2021
+Created on Fri Mar  5 08:52:41 2021
+This file we consider the target percentage
 
 @author: txia4@vols.utk.edu
-
-
-V1.1 TX20210120
-Sort the line.
-
-V1.0 TX20210119
-Fix the bug.
-Compute the Link between two area.
-
-
 """
+
 
 import logging
 import numpy as np
@@ -172,6 +164,7 @@ if __name__ == "__main__":
         gen_area_total_num = len(area_gens_indices) # select_bus_list.shape[0]
         N1_apparentpower_database = np.zeros((gen_area_total_num+1, line_total_num+1, line_total_num)) #first +1 to hold the original case;second +1 to hold N-0 solution
         N1_busvoltage_database = np.zeros((gen_area_total_num+1, line_total_num+1, bus_total_num)) # ditto
+        Target_percentange_database = np.ones((1,len(area_gens_indices)))
         
         # here is the N-1 contigency study for the base original case without displacement
         ss.PFlow.init() # helps with the initial guess
@@ -243,8 +236,17 @@ if __name__ == "__main__":
         
         # here is the displacment case
     if True:
+        stay_displacement_flag = 0
+        stay_displacement_times = 0   # how many times we have stay in that displacment
+        interval_halving_threshold = 0.0125
+        
         for ig, gen_ix in enumerate(area_gens_indices):
             
+            # we have finish the interval halving stay in that 
+            if stay_displacement_flag:
+                ig = ig-1
+                gen_ix = gen_ix -1
+                interval_halving_value = pow(0.5,stay_displacement_times +1)  # 0.5 0.25 0.0125
             # first loop: check the convergency
             factor_list = np.arange(0.1,1.1,0.1)
           
@@ -254,8 +256,12 @@ if __name__ == "__main__":
             
             logging.info('Displacing unit %s' %(ss.PV.name.v[ig]))
             print('Displacing unit %s' %(ss.PV.name.v[ig])) 
+            target_percentage = Target_percentange_database[0,ig]
+            
             for displacement_factor in factor_list:
                 
+                if displacement_factor>target_percentage: break
+            
                 ppower_change = ss.PV.p0.v[gen_ix] * displacement_factor
                 qpower_change = ss.PV.q0.v[gen_ix] * displacement_factor
                 ss.PQ.p0.v[-1] = ss.PV.p0.v[gen_ix] - ppower_change
@@ -270,6 +276,11 @@ if __name__ == "__main__":
                 ss.PFlow.init() # helps with the initial guess
                 ss.PFlow.run() # run power flow
                 
+                # if not converge change the target value
+                if not ss_temp.PFlow.converged: 
+                    Target_percentange_database[0,ig] = displacement_factor - 0.1
+                    target_percentage = Target_percentange_database[0,ig]
+                    break
                
                 #update the intial guess
                 ss.Bus.v0.v[:] = ss.Bus.v.v
@@ -278,10 +289,17 @@ if __name__ == "__main__":
             # Replacing power displacement by a complete unit shutdown
             # displacement_factor = 1    # reduce factor <=1
             
-            ss.PV.u.v[gen_ix] = 0 # disable the unit being displaced
-            ss.PQ.u.v[Total_PQ+ig] = 0 # disable the virtual PQ bus 
-            ss.PV.u.v[newgen_ix] = 1 # enable the substitute unit. Already enabled. Do it again for safe.
-            ss.PV.p0.v[newgen_ix] = ss.PV.p.v[gen_ix] # set initial power output of the added generator equal to power output of the displaced one. 
+            if target_percentage == 1:  # we can move 100% of that generator             
+                ss.PV.u.v[gen_ix] = 0 # disable the unit being displaced
+                ss.PQ.u.v[Total_PQ+ig] = 0 # disable the virtual PQ bus 
+                ss.PV.u.v[newgen_ix] = 1 # enable the substitute unit. Already enabled. Do it again for safe.
+                ss.PV.p0.v[newgen_ix] = ss.PV.p.v[gen_ix] # set initial power output of the added generator equal to power output of the displaced one. 
+            else:    # we move part of it
+                ss.PV.u.v[gen_ix] = 0 # disable the unit being displaced
+                ss.PQ.u.v[Total_PQ+ig] = 1 # enable the virtual PQ bus 
+                ss.PV.u.v[newgen_ix] = 1 # enable the substitute unit. Already enabled. Do it again for safe.
+                ss.PV.p0.v[newgen_ix] = ss.PV.p.v[gen_ix] # set initial power output of the added generator equal to power output of the displaced one. 
+
         
             apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
             bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
@@ -290,7 +308,12 @@ if __name__ == "__main__":
             
             write(ss, 'temp.xlsx',overwrite = True) # save the N-0 case with displace generator
             
+            break_contingency_loop_flag = 0  # sometime we need to stop the contingency study
+            
             for line_con_num in range(line_total_num):  
+                
+                if break_contingency_loop_flag: break
+                
                 # print('Line contingency = %d' %line_con_num)
                 ss.Line.u.v[line_con_num] = 0  # `.v` is the property for values. always use in-place modification `[]`
                 ss.connectivity() # look for islands
@@ -338,11 +361,26 @@ if __name__ == "__main__":
                             bus_voltage = ss_temp.Bus.v.v.reshape((1,bus_total_num))
                             N1_apparentpower_database[ig+1,line_con_num+1,:] = apparent_power # +1 to account for N-0 solution
                             N1_busvoltage_database[ig+1,line_con_num+1,:] = bus_voltage # ditto
+                            
+                            if target_percentage == 1: 
+                                stay_displacement_flag = 0
+                            elif interval_halving_value < interval_halving_threshold :
+                                stay_displacement_flag = 0
+                            else:
+                                stay_displacement_flag = 1
+                                stay_displacement_times = stay_displacement_times + 1
+                                Target_percentange_database[0,ig] = target_percentage + interval_halving_value
+                                break_contingency_loop_flag = 1
+                            
                         else:
                             logging.info('  Load flow did not converge for contingency on %s' %(ss_temp.Line.name.v[line_con_num]))
                             print('  Load flow did not converge for contingency on %s' %(ss_temp.Line.name.v[line_con_num]))
                             N1_apparentpower_database[ig+1, line_con_num+1, :] = 9999.9 # +1 to account for N-0 solution
                             N1_busvoltage_database[ig+1, line_con_num+1, :] = 9999.9 # ditto
+                            stay_displacement_flag = 1
+                            stay_displacement_times = stay_displacement_times + 1
+                            Target_percentange_database[0,ig] = target_percentage - interval_halving_value
+                            break_contingency_loop_flag = 1
                     except:
                         # apparentpower_database[line_con_num,:] = np.nan
                         # busvoltage_database[line_con_num,:] = np.nan
@@ -383,7 +421,7 @@ if __name__ == "__main__":
             ss.Bus.v0.v[:] = StartingCase_BusV
             ss.Bus.a0.v[:] = StartingCase_BusA
       
-    if True:
+    if False:
         dirout = 'output/' # output directory
         foutroot = 'changecase_apparentpower'
         N1_apparentpower_database2 = N1_apparentpower_database.reshape(-1,line_total_num)
@@ -407,4 +445,3 @@ if __name__ == "__main__":
     # preparing for exit
     logging.shutdown()
     print('end')
-5

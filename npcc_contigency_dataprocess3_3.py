@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Feb 17 14:08:53 2021
-severity
+Created on Thu Feb 25 19:08:19 2021
+
+accumlative plot
 @author: txia4@vols.utk.edu
 """
 
@@ -22,6 +23,7 @@ from andes.core.var import BaseVar, Algeb, ExtAlgeb
 from reconfigure_case import area_generators_indices,area_loads_indices
 from vectorized_severity import calculate_voltage_severity
 from npcc_powerflow_severity import read_cont_mx1
+from npcc_voltages_severity import plot_severity
 from review_shunt_compensation import output_continuous_heatmap_page
 from reconfigure_case import area_interface_lines_indices, area_generators_indices
 
@@ -82,7 +84,7 @@ if __name__ == "__main__":
         # mannul_nonconver_list = [0,14,15,16,19,24,32,33,46,47,56,59,109,110,112,116,138,140,193,207,232]  
 
  
-    if True: # plot heat map of power
+    if False: # plot heat map of power
         
         # nonconver_list = np.where(np.isnan(npMx_base_S[:,0]))
         #read the limit
@@ -108,7 +110,7 @@ if __name__ == "__main__":
         
         
         dirplots = 'plots/' # must create this relative directory path before running
-        fnameplot = 'flow_heatmap_absolute_severity.pdf' # file name to save the plot
+        fnameplot = 'flow_heatmap_absolute_severity_step.pdf' # file name to save the plot
         pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
         
         # npMx_base_S[mannul_nonconver_list,:] = np.nan
@@ -117,20 +119,22 @@ if __name__ == "__main__":
         severity_matrix_base = severity_matrix_base.reshape(npMx_base_S_norm.shape)
         # temp = calculate_voltage_severity(npMx_base_S_norm, dv_values, ks_values, vnom=0)
         # severity_matrix_base = temp.reshape(npMx_base_S_norm.shape)
-        if True:
-            severity_matrix_base_df = pd.DataFrame(severity_matrix_base)
-            title = 'Line-loading absolute severity, base case, PV0'
-        else:
-            severity_matrix_base_df = pd.DataFrame(npMx_base_S_norm)
-            title = 'Line-loading, base case, PV0'
-        xymax = severity_matrix_base_df.shape 
-        output_continuous_heatmap_page(pltPdf, 
-                                       severity_matrix_base_df, 
-                                       xymax, 
-                                       xylabels = ['Contingency number', 'Line number'], 
-                                       pagetitle=title, 
-                                       crange=[0,1.2]
-                                       )        
+
+        severity_matrix = severity_matrix_base
+        weight_vector = np.matlib.ones((severity_matrix.shape[1],1))
+        weight_vector = np.matlib.ones((severity_matrix.shape[1],1))
+        severity_vector = np.matlib.zeros((severity_matrix_base.shape[0],1))
+        for i in range(severity_matrix.shape[0]):
+            temp_dot = np.dot(severity_matrix[i,:],weight_vector)
+            severity_vector[i,0] = np.sum(temp_dot)
+        
+        plot_x = np.linspace(1,severity_vector.shape[0],severity_vector.shape[0])
+        plot_y = severity_vector
+        plot_y0 = plot_y
+        title = 'Line-Loading, change case, PV 0'
+        plot_severity(pltPdf, plot_x, plot_y, ylims=[0,100], title=title, xlabel='Contigency number',ylabel='Apparent Power Severity',ref = False, sort = False,step=True)
+   
+       
         for select_gen_num in range(gen_area_toal_num):  
             
             npMx_change_S = npMX_displace_S[select_gen_num,:,:]
@@ -139,26 +143,26 @@ if __name__ == "__main__":
             severity_matrix_change = calculate_voltage_severity(abs(npMx_change_S_norm), dp_values, ks_values, vnom=0)
             severity_matrix_change = severity_matrix_change.reshape(npMx_change_S_norm.shape)           
             try:
-                if True:
-                    severity_matrix_change_df = pd.DataFrame(severity_matrix_change)
-                    title = 'Line-loading absolute severity, change case, PV %d' %(ss.PV.bus.v[select_gen_num])
-                else:
-                    severity_matrix_change_df = pd.DataFrame(npMx_change_S_norm)
-                    title = 'Line-loading,  change case, PV %d' %(ss.PV.bus.v[select_gen_num])
-                output_continuous_heatmap_page(pltPdf, 
-                                               severity_matrix_change_df, 
-                                               xymax, 
-                                               xylabels = ['Contingency number', 'Line number'], 
-                                               pagetitle=title, 
-                                               crange=[0,1.2]
-                                               )
+                severity_matrix = severity_matrix_change
+                weight_vector = np.matlib.ones((severity_matrix.shape[1],1))
+                weight_vector = np.matlib.ones((severity_matrix.shape[1],1))
+                severity_vector = np.matlib.zeros((severity_matrix_base.shape[0],1))
+                for i in range(severity_matrix.shape[0]):
+                   temp_dot = np.dot(severity_matrix[i,:],weight_vector)
+                   severity_vector[i,0] = np.sum(temp_dot)
+               
+                plot_x = np.linspace(1,severity_vector.shape[0],severity_vector.shape[0])
+                plot_y = severity_vector
+                title = 'Line-Loading, change case, PV %d' %(ss.PV.bus.v[select_gen_num])
+                plot_severity(pltPdf, plot_x, plot_y,y2= plot_y0, ylims=[0,100], title=title, xlabel='Contigency number',ylabel='Apparent Power Severity',ref = False, sort = False,step=True)
+   
               
             except:
                 logging.info('** something failed' )
       
         pltPdf.close() # closes a pdf file
         
-    if True: # plot heat map of power (relative)
+    if False: # plot heat map of power (relative)
         
         # nonconver_list = np.where(np.isnan(npMx_base_S[:,0]))
         #read the limit
@@ -248,7 +252,7 @@ if __name__ == "__main__":
         ks_values = np.array([5, 10, 15])
         
         dirplots = 'plots/' # must create this relative directory path before running
-        fnameplot = 'voltage_heatmap_absolute_severity.pdf' # file name to save the plot
+        fnameplot = 'voltage_heatmap_absolute_severity_step.pdf' # file name to save the plot
         pltPdf = dpdf.PdfPages(os.path.join(dirplots,fnameplot)) # opens a pdf file
         
  
@@ -256,21 +260,20 @@ if __name__ == "__main__":
         severity_matrix_base = severity_matrix_base.reshape(npMx_base_V.shape)
         severity_matrix_base_df = pd.DataFrame(severity_matrix_base)
         
+        severity_matrix = severity_matrix_base
+        weight_vector = np.matlib.ones((severity_matrix.shape[1],1))
+        weight_vector = np.matlib.ones((severity_matrix.shape[1],1))
+        severity_vector = np.matlib.zeros((severity_matrix_base.shape[0],1))
+        for i in range(severity_matrix.shape[0]):
+            temp_dot = np.dot(severity_matrix[i,:],weight_vector)
+            severity_vector[i,0] = np.sum(temp_dot)
         
-        if True:
-            severity_matrix_base_df = pd.DataFrame(severity_matrix_base)
-            title = 'Bus voltage absolute severity, base case, PV0'
-        else:
-            severity_matrix_base_df = pd.DataFrame(npMx_base_V)
-            title = 'Bus voltage, base case, PV0'
-        xymax = severity_matrix_base_df.shape 
-        output_continuous_heatmap_page(pltPdf, 
-                                       severity_matrix_base_df, 
-                                       xymax, 
-                                       xylabels = ['Contingency number', 'Bus number'], 
-                                       pagetitle=title, 
-                                       crange=[0,1.5]
-                                       )      
+        plot_x = np.linspace(1,severity_vector.shape[0],severity_vector.shape[0])
+        plot_y = severity_vector
+        plot_y0 = plot_y
+        title = 'Bus voltage, change case, PV 0'
+        plot_severity(pltPdf, plot_x, plot_y, ylims=[0,100], title=title, xlabel='Contigency number',ylabel='Apparent Power Severity',ref = False, sort = False,step=True)
+      
         
         for select_gen_num in range(gen_area_toal_num):
             
@@ -278,26 +281,25 @@ if __name__ == "__main__":
             severity_matrix_change = calculate_voltage_severity(abs(npMx_change_V), dv_values, ks_values, vnom=1)
             severity_matrix_change = severity_matrix_change.reshape(npMx_change_V.shape)
             try:
-                if True:
-                  severity_matrix_change_df = pd.DataFrame(severity_matrix_change)
-                  title = 'Bus-voltage absolute severity, change case, PV %d' %(ss.PV.bus.v[select_gen_num])
-                else:
-                  severity_matrix_change_df = pd.DataFrame(npMx_change_V)
-                  title = 'Bus-voltage, change case, PV %d' %(ss.PV.bus.v[select_gen_num])
-                
-                output_continuous_heatmap_page(pltPdf, 
-                                               severity_matrix_change_df, 
-                                               xymax, 
-                                               xylabels = ['Contingency number', 'Bus number'], 
-                                               pagetitle=title, 
-                                               crange=[0,1.5]
-                                               )
+                severity_matrix = severity_matrix_change
+                weight_vector = np.matlib.ones((severity_matrix.shape[1],1))
+                weight_vector = np.matlib.ones((severity_matrix.shape[1],1))
+                severity_vector = np.matlib.zeros((severity_matrix_base.shape[0],1))
+                for i in range(severity_matrix.shape[0]):
+                   temp_dot = np.dot(severity_matrix[i,:],weight_vector)
+                   severity_vector[i,0] = np.sum(temp_dot)
+               
+                plot_x = np.linspace(1,severity_vector.shape[0],severity_vector.shape[0])
+                plot_y = severity_vector
+                title = 'Bus-voltage, change case, PV %d' %(ss.PV.bus.v[select_gen_num])
+                plot_severity(pltPdf, plot_x, plot_y,y2=plot_y0, ylims=[0,100], title=title, xlabel='Contigency number',ylabel='Bus Voltages Severity',ref = False, sort = False,step=True)
+   
             except:
                 logging.info('** something failed' )
         pltPdf.close() # closes a pdf file
         
         
-    if True: # plot heat map of voltage(delete the base value)
+    if False: # plot heat map of voltage(delete the base value)
         
             
         # they are actually non_converge
