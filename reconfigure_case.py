@@ -7,7 +7,7 @@ vX.Y JZBYYYYMMDD
 As we make changes the latest revisions are kept on top.
 
 v0.1 JZB20210127
-Importing the npcc case, identifying the interface line to an area, and 
+Importing the npcc case, identifying the interface lines to an area, and 
 reconfiguring the case to replace each interface line with two line segments, 
 each terminating into a PV source. For illustration, let an interface line be 
 connected between buses "s" and "r". The reconfiguration includes the following 
@@ -52,56 +52,13 @@ import andes
 from andes.core.var import BaseVar, Algeb, ExtAlgeb
 from andes.io.xlsx import write
 
+from case_utility_functions import load_case, \
+                                   area_buses_indices, \
+                                   area_interface_lines_indices, \
+                                   area_generators_indices, \
+                                   area_loads_indices
+
 # from vectorized_severity import calculate_voltage_severity
-
-#%% 
-def load_case(dirin:str, fnamein:str, setup=False):
-    # ss = andes.load(os.path.join(dirin, fnamein))
-    ss = andes.load(fnamein, input_path=dirin, setup=False)
-    logging.info("Loaded '%s'" %fnamein)
-    logging.info("The case has %d areas" %len(ss.Area))
-    for anum, aname, buses in zip(ss.Area.idx.v, ss.Area.name.v, ss.Area.Bus.v):
-        logging.info("  Area %d: '%s', with %d buses" %(anum, aname, len(buses)))
-    return ss
-
-#%%
-def area_index(ss:andes.System, area_idx):
-    ix = [i for i, idx in enumerate(ss.Area.idx.v) if idx == area_idx][0]
-    return ix
-
-#%%
-def area_buses_indices(ss:andes.System, area_idx):
-    bix = [i for i, area in enumerate(ss.Bus.area.v) if area == area_idx]
-    return bix
-
-
-#%% 
-def area_interface_lines_indices(ss:andes.System, area_idx):
-    bidx = [ss.Bus.idx.v[i] for i in area_buses_indices(ss, area_idx)]
-    # find all area's interface lines as those lines with either bus1 or bus2 in the area, but not both bus1 and bus2 in the area.
-    lidx = [i for i, buses in enumerate(zip(ss.Line.bus1.v, ss.Line.bus2.v)) \
-                              if (buses[0] in bidx or buses[1] in bidx) and not (buses[0] in bidx and buses[1] in bidx)]
-    return lidx
-
-def area_generators_indices(ss:andes.System, area_idx):
-    # find idxs of all buses in the area
-    bidx = [ss.Bus.idx.v[i] for i in area_buses_indices(ss, area_idx)]
-    # find all area's interface lines as those lines with either bus1 or bus2 in the area, but not both bus1 and bus2 in the area.
-    gix = [i for i, bus in enumerate(ss.PV.bus.v) if bus in bidx]
-    return gix
-
-def pq_gens (ss:andes.System, gens):
-    p = [ss.PV.p.v[i] for i in gens]
-    q = [ss.PV.q.v[i] for i in gens]
-    return p, q
-
-#%% 
-def area_loads_indices(ss:andes.System, area_idx):
-    # find idxs of all buses in the area
-    bidx = [ss.Bus.idx.v[i] for i in area_buses_indices(ss, area_idx)]
-    # find all area's interface lines as those lines with either bus1 or bus2 in the area, but not both bus1 and bus2 in the area.
-    lix = [i for i, bus in enumerate(ss.PQ.bus.v) if bus in bidx]
-    return lix
 
 #%%
 def add_gpfcs(ss:andes.System, interface_lines, gpfc_locations, area_idx, import_direction=True):
