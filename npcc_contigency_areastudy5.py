@@ -240,15 +240,17 @@ def displace_generator(ss:andes.system, # system
         if displacement_factor>target_power: break        
         ppower_change = ss.PV.p0.v[gen_ix] * displacement_factor
         qpower_change = ss.PV.q0.v[gen_ix] * displacement_factor
-        ss.PQ.p0.v[-1] = ss.PV.p0.v[gen_ix] - ppower_change
-        ss.PQ.q0.v[-1] = ss.PV.q0.v[gen_ix] - qpower_change
+        disaplce_PQ_idx = len(ss.PQ)-gen_area_total_num+ig
+        ss.PQ.p0.v[disaplce_PQ_idx] = -(ss.PV.p0.v[gen_ix] - ppower_change)
+        ss.PQ.q0.v[disaplce_PQ_idx] = -(ss.PV.q0.v[gen_ix] - qpower_change)
         #change the parameter of new generator
         ss.PV.p0.v[newgen_ix] = ppower_change
         ss.PV.q0.v[newgen_ix] = qpower_change
                 
         logging.info('Displacing %f pu power from generator %s' %(ppower_change, ss.PV.name.v[gen_ix]))
         print('Displacing %f pu power from generator %s' %(ppower_change, ss.PV.name.v[gen_ix]))
-                
+        # print('Displacing %f pu power on PQ %s' %(ppower_change, disaplce_PQ_idx))
+        
         ss.PFlow.init() # helps with the initial guess
         ss.PFlow.run() # run power flow
         
@@ -318,7 +320,7 @@ if __name__ == "__main__":
     # If changing basicConfig, make sure to close the dedicated console; it will not take otherwise
     logging.basicConfig(filename='logs/DOE2020.log', filemode='w', 
                         format='%(levelname)s: %(message)s',
-                        level=logging.DEBUG)
+                        level=logging.INFO)
     
     # this supposedly shows where the file is, but it does not work for me
     # print(logging.getLoggerClass().root.handlers[0].baseFilename)      
@@ -472,8 +474,14 @@ if __name__ == "__main__":
 
         logging.info('Basecase max flow severity = %g' %basecase_flow_sev_lim)
         print('Basecase max flow severity = %g' %basecase_flow_sev_lim)
-        logging.info('Basecase max bus voltage severity %g = ' %basecase_v_sev_lim)
-        print('Basecase max bus voltage severity %g =' %basecase_v_sev_lim)
+        logging.info('Basecase max bus voltage severity = %g' %basecase_v_sev_lim)
+        print('Basecase max bus voltage severity = %g' %basecase_v_sev_lim)
+
+        # save the bus flow value and seveity value for original case
+        N1_apparentpower_database[0,1:,:] = line_flows_2D # +1 to account for N-0 solution
+        N1_busvoltage_database[0,1:,:] = bus_voltages_2D # ditto
+        N1_flow_severity_database[0,1:,:] = flow_sev_mx
+        N1_voltage_severity_database[0,1:,:] = v_sev_mx 
 
     # here is the displacment case
     if True:
@@ -515,7 +523,7 @@ if __name__ == "__main__":
             # ds_filt_ix are the values of column indices that are to be considered in 
 			# calculate_line_loading_severity. dv_filt_ix is the same for voltage.
 			# THese values are tuples, so they are used as ds_filt_ix[0]
-			ds_filt_ix = np.nonzero(np.abs(ds_d2b - ds_d2b.mean()) > ds_alpha * ds_d2b.std())
+            ds_filt_ix = np.nonzero(np.abs(ds_d2b - ds_d2b.mean()) > ds_alpha * ds_d2b.std())
             dv_filt_ix = np.nonzero(np.abs(dv_d2b - dv_d2b.mean()) > dv_alpha * dv_d2b.std())
             temp = [ss.Line.name.v[i] for i in ds_filt_ix[0]]
             logging.info('Monitoring lines:')
@@ -572,10 +580,11 @@ if __name__ == "__main__":
                     logging.debug('  increasing power by %g' %(ddp))
                 
                 #undoing the last displacement
-                ss.PQ.p0.v[-1] = 0
-                ss.PQ.q0.v[-1] = 0
-                ss.PV.p0.v[gen_ix] = ss.PV.p0.v[newgen_ix]
-                ss.PV.q0.v[gen_ix] = ss.PV.q0.v[newgen_ix]
+                disaplce_PQ_idx = len(ss.PQ)-gen_area_total_num+ig
+                ss.PQ.p0.v[disaplce_PQ_idx] = 0
+                ss.PQ.q0.v[disaplce_PQ_idx] = 0
+                # ss.PV.p0.v[gen_ix] = ss.PV.p0.v[newgen_ix]
+                # ss.PV.q0.v[gen_ix] = ss.PV.q0.v[newgen_ix]
                 ss.PV.p0.v[newgen_ix] = 0
                 ss.PV.q0.v[newgen_ix] = 0
                 Target_percentange_database[ig] = displace_generator(ss, ig, target_bus_idx, displaceable_power)
