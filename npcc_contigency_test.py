@@ -28,30 +28,7 @@ from andes.core.var import BaseVar, Algeb, ExtAlgeb
 
 from vectorized_severity import calculate_voltage_severity
 from npcc_powerflow_severity import read_cont_mx1
-
-#%% save_results
-def save_database(input_database, dirout:str, foutroot:str):
-
-    logging.debug('saving ANDES data')
-    # fetch the names of the buses and set up as columns of a dataframe
-    dfBus = pd.DataFrame(input_database)
-    # add voltage magnitudes as rows of the dataframe
-    fout = os.path.join(dirout,foutroot + '.csv')
-    dfBus.to_csv(fout, index=False)
-       
-    return
-
-#%% line apparent power
-def compute_lineapparentpower(ss:andes.system):
-    
-    p1 = ss.Line.a1.e
-    p2 = ss.Line.a2.e
-    q1 = ss.Line.v1.e
-    q2 = ss.Line.v2.e
-    s1 = np.square(p1)+np.square(q1)
-    s2 = np.square(p2)+np.square(q2)
-    s = np.sqrt(np.amax(np.stack((s1,s2)),axis = 0))
-    return s
+from case_utility_functions import save_database, compute_lineapparentpower
 
 
 #%% Code testing

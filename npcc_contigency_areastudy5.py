@@ -48,12 +48,13 @@ from case_utility_functions import area_generators_indices, \
                                    area_interface_lines_indices, \
                                    area_import_limits, \
                                    line_idxs_causing_islands, \
-                                   generate_contingency_list
+                                   generate_contingency_list, \
+                                   save_database, \
+                                   compute_lineapparentpower
 
 from npcc_powerflow_severity import read_cont_mx1
-from npcc_contigency_test import compute_lineapparentpower
 from review_shunt_compensation import output_continuous_heatmap_page
-from npcc_contigency_test import save_database
+
 
 #%% Retired JZB20210323
 ##%% find the link of two area | returen uid
@@ -259,8 +260,8 @@ def displace_generator(ss:andes.system, # system
     ss.Bus.a0.v[:] = ss.Bus.a.v
     ss.PQ.p0.v[pq_ix] = -p_temp
     ss.PQ.q0.v[pq_ix] = -q_temp
-    logging.info('Displaced %f pu power' %(displacement_factor))
-    print('Displaced %f pu power' %(displacement_factor))
+    logging.info('  transferred %f pu power' %(displacement_factor))
+    print('  transferred %f pu power' %(displacement_factor))
 
     return displacement_factor
 
@@ -303,8 +304,8 @@ def check_v_severity(bus_voltage_severity, ind_threshold = 9999.9, dv_filt_ix=No
         max_v_sev = np.nanmax(bus_voltage_severity[:, dv_filt_ix])
     else:
         max_v_sev = np.nanmax(bus_voltage_severity)
-    logging.info('Max voltage severity = %g' %max_v_sev)
-    print('Max voltage severity = %g' %max_v_sev)
+    logging.info('  max voltage severity = %g' %max_v_sev)
+    print('  max voltage severity = %g' %max_v_sev)
 
     if max_v_sev-ind_threshold > eps:
         check_result = False
@@ -328,8 +329,8 @@ def check_flow_severity(line_flow_severity, ind_threshold = 9999.9, ds_filt_ix =
         max_s_sev = np.nanmax(line_flow_severity[:, ds_filt_ix])
     else:
         max_s_sev = np.nanmax(line_flow_severity)
-    logging.info('Max flow severity = %g ' %max_s_sev)
-    print('Max flow severity = %g ' %max_s_sev)
+    logging.info('  max flow severity = %g ' %max_s_sev)
+    print('  max flow severity = %g ' %max_s_sev)
     if max_s_sev-ind_threshold > eps:
         check_result = False
 
@@ -351,7 +352,7 @@ if __name__ == "__main__":
     # If changing basicConfig, make sure to close the dedicated console; it will not take otherwise
     logging.basicConfig(filename='logs/DOE2020.log', filemode='w',
                         format='%(levelname)s: %(message)s',
-                        level=logging.INFO)
+                        level=logging.DEBUG)
 
     # this supposedly shows where the file is, but it does not work for me
     # print(logging.getLoggerClass().root.handlers[0].baseFilename)
@@ -370,7 +371,7 @@ if __name__ == "__main__":
     casefile = 'caseNPCC_wAreas.xlsx'
     outdir = 'results/'
     ss = andes.load(casefile, input_path=casedir, setup=False)
-    ss.PFlow.config.max_iter = 50
+    # ss.PFlow.config.max_iter = 50
 
     # Retired JZB20210320
     # calculate the area input limit as the thermal capability of interface lines
@@ -476,10 +477,10 @@ if __name__ == "__main__":
         line_total_num = len(ss.Line)  # 234-1 # 3 means fake line
         bus_total_num = len(ss.Bus) # 140
         gen_area_total_num = len(area_gens_indices) # select_bus_list.shape[0]
-        N1_apparentpower_database = np.zeros((gen_area_total_num+1, line_total_num+1, line_total_num)) # first +1 to hold the original case;second +1 to hold N-0 solution
-        N1_busvoltage_database = np.zeros((gen_area_total_num+1, line_total_num+1, bus_total_num)) # ditto
-        N1_flow_severity_database = np.zeros((gen_area_total_num+1, line_total_num+1, line_total_num)) # first +1 to hold the original case;second +1 to hold N-0 solution
-        N1_voltage_severity_database = np.zeros((gen_area_total_num+1, line_total_num+1, bus_total_num)) # ditto
+        N1_flows = np.zeros((gen_area_total_num+1, line_total_num+1, line_total_num)) # first +1 to hold the original case;second +1 to hold N-0 solution
+        N1_voltages = np.zeros((gen_area_total_num+1, line_total_num+1, bus_total_num)) # ditto
+        N1_flow_severities = -np.ones((gen_area_total_num+1, line_total_num+1, line_total_num)) # first +1 to hold the original case;second +1 to hold N-0 solution
+        N1_voltage_severities = -np.ones((gen_area_total_num+1, line_total_num+1, bus_total_num)) # ditto
         Target_pu_power = np.ones_like(area_gens_indices, dtype=float)
 
         # Perform  N-1 contigency analysis of the base case (without displacement)
@@ -487,8 +488,13 @@ if __name__ == "__main__":
         ss.PFlow.run() # run power flow
         apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
         bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
-        N1_apparentpower_database[0,0,:] = apparent_power # saving N-0 solution
-        N1_busvoltage_database[0,0,:] = bus_voltage # ditto
+        apparent_power_pu = apparent_power/(lines_flow_limits/ss.config.mva)
+        flow_sev_mx = calculate_line_loading_severity(apparent_power_pu)
+        v_sev_mx  = calculate_bus_voltage_severity(bus_voltage)
+        N1_flows[0,0,:] = apparent_power_pu # saving N-0 solution
+        N1_voltages[0,0,:] = bus_voltage # ditto
+        N1_flow_severities[0,0,:] = flow_sev_mx
+        N1_voltage_severities[0,0,:] = v_sev_mx
 
         # Save the case to file before staritng the contingency analysis
         write(ss, 'temp.xlsx', overwrite = True)
@@ -498,6 +504,11 @@ if __name__ == "__main__":
         # here is the severity for N-1 contingency for original case
         flow_sev_mx = calculate_line_loading_severity(line_flows_2D_pu)
         v_sev_mx  = calculate_bus_voltage_severity(bus_voltages_2D)
+
+        N1_flows[0,1:,:] = line_flows_2D_pu
+        N1_voltages[0,1:,:] = bus_voltages_2D
+        N1_flow_severities[0,1:,:] = flow_sev_mx
+        N1_voltage_severities[0,1:,:] = v_sev_mx
 
         # Extract the individual max severity for flows and voltages
         # Define severity limits
@@ -540,15 +551,20 @@ if __name__ == "__main__":
             # save the N-0 case
             apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
             bus_voltage = ss.Bus.v.v.reshape((1,bus_total_num))
-            N1_apparentpower_database[ig+1,0,:] = apparent_power # saving N-0 solution
-            N1_busvoltage_database[ig+1,0,:] = bus_voltage # ditto
+            apparent_power_pu = apparent_power/(lines_flow_limits/ss.config.mva)
+            flow_sev_mx = calculate_line_loading_severity(apparent_power_pu)
+            v_sev_mx  = calculate_bus_voltage_severity(bus_voltage)
+            N1_flows[ig+1,0,:] = apparent_power_pu # saving N-0 solution
+            N1_voltages[ig+1,0,:] = bus_voltage # ditto
+            N1_flow_severities[ig+1,0,:] = flow_sev_mx
+            N1_voltage_severities[ig+1,0,:] = v_sev_mx
 
             write(ss, 'temp.xlsx', overwrite = True) # save the N-0 case with a displaced generator
 
             # set filters to lines and buses that have actually changed due to displacement
 			# ds_d2b means: "delta apparent power, displacement to base". dv_d2b is analogous for voltage
-            ds_d2b = N1_apparentpower_database[ig+1,0,:] - N1_apparentpower_database[0,0,:]
-            dv_d2b = N1_busvoltage_database[ig+1,0,:] - N1_busvoltage_database[0,0,:]
+            ds_d2b = N1_flows[ig+1,0,:] - N1_flows[0,0,:]
+            dv_d2b = N1_voltages[ig+1,0,:] - N1_voltages[0,0,:]
             ds_alpha = 1.0
             dv_alpha = 1.0
             # ds_filt_ix are the values of column indices that are to be considered in
@@ -605,12 +621,12 @@ if __name__ == "__main__":
                 else:
                     ddp = ddp/2 # adjust delta displaceable power
                     if ddp<eps:
-                        print('  precision reached, exiting')
-                        logging.debug('  precision reached, exiting')
+                        print('  severity within limits and precision reached, exiting')
+                        logging.debug('  severity within limits and precision reached, exiting')
                         break
                     if (displaceable_power >= Target_pu_power[ig]):
-                        print('  success on the first try, exiting')
-                        logging.debug('  success on the first try, exiting')
+                        print('  severity within limits at target power, exiting')
+                        logging.debug('  severity within limits at target power, exiting')
                         break
                     displaceable_power += ddp
                     print('  increasing power by %g' %(ddp))
@@ -625,10 +641,10 @@ if __name__ == "__main__":
                 write(ss, 'temp.xlsx', overwrite = True) # save the N-0 case with displaced generator
 
             # Save the data after the interval halving
-            N1_apparentpower_database[ig+1,1:,:] = line_flows_2D # +1 to account for N-0 solution
-            N1_busvoltage_database[ig+1,1:,:] = bus_voltages_2D # ditto
-            N1_flow_severity_database[ig+1,1:,:] = flow_sev_mx
-            N1_voltage_severity_database[ig+1,1:,:] = v_sev_mx
+            N1_flows[ig+1,1:,:] = line_flows_2D_pu # +1 to account for N-0 solution
+            N1_voltages[ig+1,1:,:] = bus_voltages_2D # ditto
+            N1_flow_severities[ig+1,1:,:] = flow_sev_mx
+            N1_voltage_severities[ig+1,1:,:] = v_sev_mx
 
             # Revert the changes to begin analysis of the next generator
             ss.PV.p0.v[newgen_ix] = 0
@@ -643,16 +659,17 @@ if __name__ == "__main__":
 
     if True:
         dirout = 'output/' # output directory
-        foutroot = 'changecase_apparentpower'
-        N1_apparentpower_database2 = N1_apparentpower_database.reshape(-1,line_total_num)
-        save_database(N1_apparentpower_database2, dirout, foutroot)
-        foutroot = 'changecase_busvoltage'
-        N1_busvoltage_database2 = N1_busvoltage_database.reshape(-1,bus_total_num)
-        save_database(N1_busvoltage_database2, dirout, foutroot)
+        # Retired JZB202103424
+        # foutroot = 'changecase_apparentpower'
+        # N1_flows2 = N1_flows.reshape(-1,line_total_num)
+        # save_database(N1_flows2, dirout, foutroot)
+        # foutroot = 'changecase_busvoltage'
+        # N1_voltages2 = N1_voltages.reshape(-1,bus_total_num)
+        # save_database(N1_voltages2, dirout, foutroot)
 
         # reshape line flows and bus voltages into 2D data structures
-        N1_flows = N1_apparentpower_database.reshape((gen_area_total_num+1) * (line_total_num+1), line_total_num) # +1 to account for N-0 solution
-        N1_voltages = N1_busvoltage_database.reshape((gen_area_total_num+1) * (line_total_num+1), bus_total_num) # ditto
+        N1_flows = N1_flows.reshape((gen_area_total_num+1) * (line_total_num+1), line_total_num) # +1 to account for N-0 solution
+        N1_voltages = N1_voltages.reshape((gen_area_total_num+1) * (line_total_num+1), bus_total_num) # ditto
         # prepend an index column to the 2d data structures to denote the idx of each moved generator
         gidx = [ss.PV.idx.v[i] for i in area_gens_indices] #  extract idxs of all generators in the area
         gidx = np.hstack(([0],gidx)) # add 0 for the original case
@@ -664,24 +681,26 @@ if __name__ == "__main__":
     
         #severity version
         dirout = 'output/' # output directory
-        foutroot = 'changecase_apparentpower_severity'
-        N1_flow_severity_database2 = N1_flow_severity_database.reshape(-1,line_total_num)
-        save_database(N1_flow_severity_database2, dirout, foutroot)
-        foutroot = 'changecase_busvoltage_severity'
-        N1_voltage_severity_database2 = N1_voltage_severity_database.reshape(-1,bus_total_num)
-        save_database(N1_voltage_severity_database2, dirout, foutroot)
+        # Retired JZB202103424
+        # foutroot = 'changecase_apparentpower_severity'
+        # N1_flow_severities2 = N1_flow_severities.reshape(-1,line_total_num)
+        # save_database(N1_flow_severities2, dirout, foutroot)
+        # foutroot = 'changecase_busvoltage_severity'
+        # N1_voltage_severities2 = N1_voltage_severities.reshape(-1,bus_total_num)
+        # save_database(N1_voltage_severities2, dirout, foutroot)
 
-        # reshape line flows and bus voltages into 2D data structures
-        N1_flows_severity = N1_flow_severity_database.reshape((gen_area_total_num+1) * (line_total_num+1), line_total_num) # +1 to account for N-0 solution
-        N1_voltages_severity = N1_voltage_severity_database.reshape((gen_area_total_num+1) * (line_total_num+1), bus_total_num) # ditto
+        # Reshape line flows and bus voltages into 2D data structures
+        dirout = 'output/' # output directory
+        N1_flows_severity = N1_flow_severities.reshape((gen_area_total_num+1) * (line_total_num+1), line_total_num) # +1 to account for N-0 solution
+        N1_voltages_severity = N1_voltage_severities.reshape((gen_area_total_num+1) * (line_total_num+1), bus_total_num) # ditto
         # prepend an index column to the 2d data structures to denote the idx of each moved generator
         gidx = [ss.PV.idx.v[i] for i in area_gens_indices] #  extract idxs of all generators in the area
         gidx = np.hstack(([0],gidx)) # add 0 for the original case
         N1_index = np.repeat(gidx, line_total_num+1).reshape(-1,1) # expand it to match the 2d solution arrays, then turn into a column-vector
         temp = np.hstack((N1_index,N1_flows_severity)) # prepend the index column to line flows
-        save_database(temp, dirout, 'line_flows_severity') # save line flows
+        save_database(temp, dirout, 'line_flow_severities') # save line flows
         temp = np.hstack((N1_index,N1_voltages_severity)) # prepend the index column to bus voltages
-        save_database(temp, dirout, 'bus_voltages_severity') # save it
+        save_database(temp, dirout, 'bus_voltage_severities') # save it
 
 
     # preparing for exit

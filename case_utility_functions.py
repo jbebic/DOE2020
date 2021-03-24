@@ -13,15 +13,38 @@ Utility functions for loading, saving, and topology processing of an ANDES syste
 
 import logging
 import numpy as np
-# import pandas as pd
+import pandas as pd
 # import matplotlib.pyplot as plt # plotting
 
 # from datetime import datetime # time stamps
-# import os # operating system interface
+import os # operating system interface
 
 import andes
 # from andes.core.var import BaseVar, Algeb, ExtAlgeb
-from andes.io.xlsx import write
+# from andes.io.xlsx import write
+
+#%% save_results
+def save_database(input_database, dirout:str, foutroot:str):
+    logging.debug('saving ANDES data')
+    # fetch the names of the buses and set up as columns of a dataframe
+    dfBus = pd.DataFrame(input_database)
+    # add voltage magnitudes as rows of the dataframe
+    fout = os.path.join(dirout,foutroot + '.csv')
+    dfBus.to_csv(fout, index=False)
+       
+    return
+
+#%% line apparent power
+def compute_lineapparentpower(ss:andes.system):
+    p1 = ss.Line.a1.e
+    p2 = ss.Line.a2.e
+    q1 = ss.Line.v1.e
+    q2 = ss.Line.v2.e
+    s1 = np.square(p1)+np.square(q1)
+    s2 = np.square(p2)+np.square(q2)
+    s = np.sqrt(np.amax(np.stack((s1,s2)),axis = 0))
+    return s
+
 
 #%% 
 def load_case(dirin:str, fnamein:str, setup=False):
@@ -87,6 +110,8 @@ def area_import_limits(ss:andes.System, area_idx, lines_flow_limits):
 
 #%%
 def line_idxs_causing_islands(ss:andes.System):
+    logging.debug('Screening for line contingencies that result in islands')
+    print('Screening for line contingencies that result in islands')
     lidxs = [] # contingencies causing islands
     for lix in range(len(ss.Line)):
         ss.Line.u.v[lix] = 0
@@ -96,8 +121,8 @@ def line_idxs_causing_islands(ss:andes.System):
             bus1 = ss.Line.bus1.v[lix]
             bus2 = ss.Line.bus2.v[lix]
             lidxs.append(lidx)
-            logging.debug('Contingency on %s from %s to %s causes an island' %(lidx, bus1, bus2))
-            print('Contingency on %s from %s to %s causes an island' %(lidx, bus1, bus2))
+            logging.debug('  Contingency on %s from %s to %s causes an island' %(lidx, bus1, bus2))
+            print('  Contingency on %s from %s to %s causes an island' %(lidx, bus1, bus2))
         ss.Line.u.v[lix] = 1
     return lidxs
 
