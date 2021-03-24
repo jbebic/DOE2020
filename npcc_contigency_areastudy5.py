@@ -582,6 +582,16 @@ if __name__ == "__main__":
             logging.info(temp)
             print('Monitoring buses:', temp)
 
+            # Display severities on monitored lines and buses.
+            logging.info('Basecase N-1 flow severity = %g' %np.nanmax(N1_flow_severities[0,:,ds_filt_ix[0]]))
+            print('Basecase N-1 flow severity = %g' %np.nanmax(N1_flow_severities[0,:,ds_filt_ix[0]]))
+            logging.info('Basecase N-1 voltage severity = %g' %np.nanmax(N1_voltage_severities[0,:,dv_filt_ix[0]]))
+            print('Basecase N-1 voltage severity = %g' %np.nanmax(N1_voltage_severities[0,:,dv_filt_ix[0]]))
+            logging.info('Displaced N-0 flow severity = %g' %np.nanmax(flow_sev_mx[0,ds_filt_ix[0]]))
+            print('Displaced N-0 flow severity = %g' %np.nanmax(flow_sev_mx[0,ds_filt_ix[0]]))
+            logging.info('Displaced N-0 voltage severity = %g' %np.nanmax(v_sev_mx[0,dv_filt_ix[0]]))
+            print('Displaced N-0 voltage severity = %g' %np.nanmax(v_sev_mx[0,dv_filt_ix[0]]))
+
             # Set severity limits here
             # allowing 1.5 line loading
             flow_sev_lim = 5*(1-0.8) + 10*(1.2-1) + 20*(1.5-1.2) # basecase_flow_sev_lim
@@ -702,6 +712,7 @@ if __name__ == "__main__":
         temp = np.hstack((N1_index,N1_voltages_severity)) # prepend the index column to bus voltages
         save_database(temp, dirout, 'bus_voltage_severities') # save it
 
+        save_database(Target_pu_power, dirout, 'displaced_pu_powers')
 
     # preparing for exit
     logging.shutdown()
