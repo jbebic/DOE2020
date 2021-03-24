@@ -55,53 +55,55 @@ from npcc_contigency_test import compute_lineapparentpower
 from review_shunt_compensation import output_continuous_heatmap_page
 from npcc_contigency_test import save_database
 
-#%% find the link of two area | returen uid
-def area_num_detect(ss:andes.system,area1_num, area2_num):
-
-    line_total_num = len(ss.Line.u.v)
-    line_area_num_database = np.zeros((line_total_num,2))
-    for i in range(line_total_num): 
-        # print(i)
-        line_area_num_database[i,:] = area_num_for_line(ss,i)
-        
-    result = np.where((line_area_num_database == (area1_num, area2_num)).all(axis=1)|(line_area_num_database == (area2_num, area1_num)).all(axis=1))
-    # result1 = np.where((line_area_num_database == (area1_num, area2_num)).all(axis=1))
-    # result2 = np.where((line_area_num_database == (area2_num, area1_num)).all(axis=1))
-    return result
-#%% find the area the first bus of one line
-def area_num_for_line(ss:andes.system,line_num=0):  # start from line 0
-
-    bus1_num = ss.Line.bus1.v[line_num]
-    bus2_num = ss.Line.bus2.v[line_num]
-    
-    area1_num = ss.Bus.area.v[bus1_num-1]     # uid = bus_num(bus name) - 1
-    area2_num = ss.Bus.area.v[bus2_num-1]
-    area_num = [area1_num,area2_num]
-    return area_num
-#%% sort the line based on the capacity
-def sort_line(line_database,line_capacity_database):  # start from line 0
-
-    line_capacity_database_temp = line_capacity_database[line_database]
-    line_database = np.asarray(line_database).T
-    temp = np.append(line_database,line_capacity_database_temp,axis=1)
-    temp2 = temp[np.lexsort(-temp.T)]
-
-    return temp2
-
-#%% sort the line based on the capacity
-def islanding_list(ss:andes.system):  # start from line 0
-
-    toal_line_num = len(ss.Line.uid)-1
-    islanding_case = []
-    ss.setup()
-    for i in range(toal_line_num):
-        ss.Line.u.v[i] = 0
-        ss.connectivity()
-        if ss.Bus.n_islanded_buses:
-           islanding_case.append(i)
-        ss.Line.u.v[i] = 1
-           
-    return islanding_case
+#%% Retired JZB20210323
+##%% find the link of two area | returen uid
+# def area_num_detect(ss:andes.system,area1_num, area2_num):
+#
+#     line_total_num = len(ss.Line.u.v)
+#     line_area_num_database = np.zeros((line_total_num,2))
+#     for i in range(line_total_num): 
+#         # print(i)
+#         line_area_num_database[i,:] = area_num_for_line(ss,i)
+#       
+#     result = np.where((line_area_num_database == (area1_num, area2_num)).all(axis=1)|(line_area_num_database == (area2_num, area1_num)).all(axis=1))
+#     # result1 = np.where((line_area_num_database == (area1_num, area2_num)).all(axis=1))
+#     # result2 = np.where((line_area_num_database == (area2_num, area1_num)).all(axis=1))
+#     return result
+#
+# #%% find the area the first bus of one line
+# def area_num_for_line(ss:andes.system,line_num=0):  # start from line 0
+#
+#     bus1_num = ss.Line.bus1.v[line_num]
+#     bus2_num = ss.Line.bus2.v[line_num]
+#    
+#     area1_num = ss.Bus.area.v[bus1_num-1]     # uid = bus_num(bus name) - 1
+#     area2_num = ss.Bus.area.v[bus2_num-1]
+#     area_num = [area1_num,area2_num]
+#     return area_num
+# #%% sort the line based on the capacity
+# def sort_line(line_database,line_capacity_database):  # start from line 0
+#
+#     line_capacity_database_temp = line_capacity_database[line_database]
+#     line_database = np.asarray(line_database).T
+#     temp = np.append(line_database,line_capacity_database_temp,axis=1)
+#     temp2 = temp[np.lexsort(-temp.T)]
+#
+#     return temp2
+#
+# #%% sort the line based on the capacity
+# def islanding_list(ss:andes.system):  # start from line 0
+#
+#     toal_line_num = len(ss.Line.uid)-1
+#     islanding_case = []
+#     ss.setup()
+#     for i in range(toal_line_num):
+#         ss.Line.u.v[i] = 0
+#         ss.connectivity()
+#         if ss.Bus.n_islanded_buses:
+#            islanding_case.append(i)
+#         ss.Line.u.v[i] = 1
+#
+#     return islanding_case
 
 #%% contiency analysis
 def contingency_analysis(ss:andes.system, contingencies:list): # system model
@@ -145,6 +147,7 @@ def contingency_analysis(ss:andes.system, contingencies:list): # system model
             newslack_idx = ss_temp.add('Slack', dict(bus=newslack_bus_idx, 
                                                      p0=0, 
                                                      v0=vref, 
+                                                     Vn=230,
                                                      u=1, 
                                                      idx=95001,
                                                      name='slack 95001'))
@@ -226,43 +229,73 @@ def calculate_bus_voltage_severity(bus_voltage,
     return bus_voltage_severity
 #%% bus voltage severity
 def displace_generator(ss:andes.system, # system
-			ig, # generator to displace
-			target_bus_idx, # target bus
-			target_power = 1): # pu value of power on system base) 
-    
-    # target_percentage = target_power# Target_percentange_database[0,ig] 
-    
-    factor_list = np.linspace(0, target_power, 10)
-    
-    displacement_factor_z1 = factor_list[0]
-    for displacement_factor in factor_list:
-        
-        if displacement_factor>target_power: break        
-        ppower_change = ss.PV.p0.v[gen_ix] * displacement_factor
-        qpower_change = ss.PV.q0.v[gen_ix] * displacement_factor
-        ss.PQ.p0.v[-1] = ss.PV.p0.v[gen_ix] - ppower_change
-        ss.PQ.q0.v[-1] = ss.PV.q0.v[gen_ix] - qpower_change
-        #change the parameter of new generator
-        ss.PV.p0.v[newgen_ix] = ppower_change
-        ss.PV.q0.v[newgen_ix] = qpower_change
-                
-        logging.info('Displacing %f pu power from generator %s' %(ppower_change, ss.PV.name.v[gen_ix]))
-        print('Displacing %f pu power from generator %s' %(ppower_change, ss.PV.name.v[gen_ix]))
-                
-        ss.PFlow.init() # helps with the initial guess
-        ss.PFlow.run() # run power flow
-        
-        # if not converge change the target value
-        if not ss.PFlow.converged: 
-            target_power = displacement_factor_z1
-            break        
-               
-        #update the intial guess
-        ss.Bus.v0.v[:] = ss.Bus.v.v
-        ss.Bus.a0.v[:] = ss.Bus.a.v
-        displacement_factor_z1 = displacement_factor
+                       pq_ix, # index of a local substitute pq generator
+                       newgen_ix, # index of a new generaotr
+                       target_power, # pu value of power of the generator
+                       eps = 0.01): # exit precision
 
-    return target_power
+    displacement_factor = target_power
+    ddf = displacement_factor # delta displacement factor
+    p_temp = -ss.PQ.p0.v[pq_ix]
+    q_temp = -ss.PQ.q0.v[pq_ix]
+    while True:
+        ss.PV.p0.v[newgen_ix] = p_temp * displacement_factor
+        ss.PQ.p0.v[pq_ix] = -p_temp * (1. - displacement_factor)
+        ss.PQ.q0.v[pq_ix] = -q_temp * (1. - displacement_factor)
+        ss.PFlow.run() # run power flow
+        if ss.PFlow.converged: 
+            if ddf < eps: break
+            ddf = ddf/2
+            if displacement_factor + ddf > target_power: break
+            displacement_factor += ddf
+        else:
+            ddf = ddf/2
+            displacement_factor -= ddf
+            if ddf < 1e-3:
+                raise RuntimeError("Failed to displace the generator")
+
+    # update bus voltage magnitudes and angles
+    ss.Bus.v0.v[:] = ss.Bus.v.v
+    ss.Bus.a0.v[:] = ss.Bus.a.v
+    ss.PQ.p0.v[pq_ix] = -p_temp
+    ss.PQ.q0.v[pq_ix] = -q_temp 
+    logging.info('Displaced %f pu power' %(displacement_factor))
+    print('Displaced %f pu power' %(displacement_factor))
+
+    return displacement_factor
+
+    # Retired JZB20210323
+    # factor_list = np.linspace(0, target_power, 10)
+    
+    # displacement_factor_z1 = factor_list[0]
+    # for displacement_factor in factor_list:
+    #     # if displacement_factor>target_power:
+    #     #     break        
+    #     ppower_change = ss.PV.p0.v[gen_ix] * displacement_factor
+    #     qpower_change = ss.PV.q0.v[gen_ix] * displacement_factor
+    #     ss.PQ.p0.v[pq_ix] = -(ss.PV.p0.v[gen_ix] - ppower_change) # PQ are loads
+    #     ss.PQ.q0.v[pq_ix] = -(ss.PV.q0.v[gen_ix] - qpower_change)
+    #     ss.PV.p0.v[newgen_ix] = ppower_change
+    #     ss.PV.q0.v[newgen_ix] = qpower_change
+                                
+    #     # ss.PFlow.init() # helps with the initial guess
+    #     ss.PFlow.run() # run power flow
+        
+    #     # if it did not converge give up, but return the last value that did converge
+    #     if not ss.PFlow.converged: 
+    #         displacement_factor = displacement_factor_z1
+    #         break        
+               
+    #     #update the initial guess
+    #     ss.Bus.v0.v[:] = ss.Bus.v.v
+    #     ss.Bus.a0.v[:] = ss.Bus.a.v
+    #     displacement_factor_z1 = displacement_factor
+
+    # logging.info('Displaced %f pu power from generator %s' %(displacement_factor, ss.PV.name.v[gen_ix]))
+    # print('Displaced %f pu power from generator %s' %(displacement_factor, ss.PV.name.v[gen_ix]))
+
+    # return displacement_factor
+
 #%% check_v_severity
 def check_v_severity(bus_voltage_severity, ind_threshold = 9999.9, dv_filt_ix=None, eps=1e-3): # acc_threshold = 99999.99
     check_result = True   # the default value is True means we don't need to worry about it
@@ -337,6 +370,7 @@ if __name__ == "__main__":
     casefile = 'caseNPCC_wAreas.xlsx'
     outdir = 'results/'
     ss = andes.load(casefile, input_path=casedir, setup=False)
+    ss.PFlow.config.max_iter = 50
     
     # Retired JZB20210320
     # calculate the area input limit as the thermal capability of interface lines
@@ -356,8 +390,6 @@ if __name__ == "__main__":
     print('  N-0: %g' %(n0_MVA_lim))
     logging.info('  N-1: %g MVA' %(n1_MVA_lim))
     print('  N-1: %g MVA' %(n1_MVA_lim))
-    
-    # ss.PFlow.config.max_iter = 25
     
     # find the slack bus idx
     # slack_bus = ss.Bus.idx.v.index(ss.Slack.bus.v[0])  # uid of slack bus
@@ -379,6 +411,7 @@ if __name__ == "__main__":
         
         newgen_idx = ss.add('PV', dict(bus=target_bus_idx, # we specify a bus idx, not index
                                        p0=0, v0=1, # initial values for load flow
+                                       Vn=230,
                                        u=0, # starting with an added generator disabled
                                        idx=98001) # 98 prefix is used to designate displaced units, and
                            )                      # 001 is the index of a displaced unit.
@@ -386,10 +419,11 @@ if __name__ == "__main__":
         
         # Add substitute PQ models to all generators (PV models) in the area.
         # The PQ models are used to gradually move the generator to a target bus.
-        Total_PQ = len(ss.PQ.u.v)
+        # Retired JZB20210323 
+        # Total_PQ = len(ss.PQ.u.v)
         added_PQ_idxs = []
         for i in area_gens_indices:
-            temp = ss.add('PQ', dict(bus=ss.PV.bus.v[i], p0=0, q0=1, u=0))
+            temp = ss.add('PQ', dict(bus=ss.PV.bus.v[i], p0=0, q0=0, Vn=230, u=0))
             added_PQ_idxs.append(temp)
             
         # check the result
@@ -423,8 +457,8 @@ if __name__ == "__main__":
         print('Total import to area %d = %g MW' %(study_area, np.sum(ss.Line.a1.e[il_ixs] * il_signs)))
         
         #save the data of N-0 starting case
-        StartingCase_BusV = ss.Bus.v.v
-        StartingCase_BusA = ss.Bus.a.v
+        basecase_vmags = ss.Bus.v.v
+        basecase_angs = ss.Bus.a.v
  
     if True: # the generation displacement "inner loop" "
         
@@ -438,7 +472,7 @@ if __name__ == "__main__":
         # Option 3: filter by area and exclude island-causing contingencies
         contingency_list = generate_contingency_list(ss, study_area)
         
-        # database initialization
+        # Initialize numpy data structures to hold results
         line_total_num = len(ss.Line)  # 234-1 # 3 means fake line
         bus_total_num = len(ss.Bus) # 140
         gen_area_total_num = len(area_gens_indices) # select_bus_list.shape[0]
@@ -446,9 +480,9 @@ if __name__ == "__main__":
         N1_busvoltage_database = np.zeros((gen_area_total_num+1, line_total_num+1, bus_total_num)) # ditto
         N1_flow_severity_database = np.zeros((gen_area_total_num+1, line_total_num+1, line_total_num)) # first +1 to hold the original case;second +1 to hold N-0 solution
         N1_voltage_severity_database = np.zeros((gen_area_total_num+1, line_total_num+1, bus_total_num)) # ditto
-        Target_percentange_database = np.ones_like(area_gens_indices)
+        Target_pu_power = np.ones_like(area_gens_indices, dtype=float)
         
-        # here is the N-1 contigency study for the base original case without displacement
+        # Perform  N-1 contigency analysis of the base case (without displacement)
         ss.PFlow.init() # helps with the initial guess
         ss.PFlow.run() # run power flow
         apparent_power = compute_lineapparentpower(ss).reshape((1,line_total_num))
@@ -456,7 +490,7 @@ if __name__ == "__main__":
         N1_apparentpower_database[0,0,:] = apparent_power # saving N-0 solution
         N1_busvoltage_database[0,0,:] = bus_voltage # ditto
         
-        # save the case to file before staritng the contingency analysis
+        # Save the case to file before staritng the contingency analysis
         write(ss, 'temp.xlsx', overwrite = True)
         
         line_flows_2D, bus_voltages_2D = contingency_analysis(ss, contingency_list)
@@ -465,37 +499,42 @@ if __name__ == "__main__":
         flow_sev_mx = calculate_line_loading_severity(line_flows_2D_pu)
         v_sev_mx  = calculate_bus_voltage_severity(bus_voltages_2D)
 
-        # extract the individual max severity for voltage and flow 
+        # Extract the individual max severity for flows and voltages 
         # Define severity limits
         basecase_flow_sev_lim = np.nanmax(flow_sev_mx)
         basecase_v_sev_lim = np.nanmax(v_sev_mx)
 
         logging.info('Basecase max flow severity = %g' %basecase_flow_sev_lim)
         print('Basecase max flow severity = %g' %basecase_flow_sev_lim)
-        logging.info('Basecase max bus voltage severity %g = ' %basecase_v_sev_lim)
-        print('Basecase max bus voltage severity %g =' %basecase_v_sev_lim)
+        logging.info('Basecase max bus voltage severity = %g' %basecase_v_sev_lim)
+        print('Basecase max bus voltage severity = %g' %basecase_v_sev_lim)
 
-    # here is the displacment case
+    # Begin the displacment analysis
     if True:
+        # Enable the target generaotr
+        ss.PV.alter('u', newgen_idx, 1) # enable the target generator (39)
         
+        # Loop over generators
         for ig, gen_ix in enumerate(area_gens_indices):
+
+            # Enable the local PQ unit to gradually shift the output to a target generator
+            pq_ix = ss.PQ.uid[added_PQ_idxs[ig]] # find the index of the matching unit
+            ss.PQ.alter('u', ss.PQ.idx.v[pq_ix], 1) # enable it
+            # Set the p0, q0 output of the replacement unit to match actual p, q from the generator to be displaced
+            p_keep = ss.PV.p.v[gen_ix]
+            q_keep = ss.PV.q.v[gen_ix]
+            ss.PQ.p0.v[pq_ix] = -p_keep
+            ss.PQ.q0.v[pq_ix] = -q_keep
+            # Disable the generator to be displaced
+            ss.PV.alter('u', ss.PV.idx.v[gen_ix], 0)
             
-            # first loop: check the convergence
-           
-            # ss.PV.u.v[gen_ix] = 0 # disable the unit being displaced
-            ss.PV.alter('u',ss.PV.idx.v[gen_ix],0)
-            # ss.PQ.u.v[Total_PQ+ig] = 1 # enable the virtual PQ bus
-            ss.PQ.alter('u',ss.PQ.idx.v[Total_PQ+ig],1)
-            ss.PV.alter('u', newgen_idx, 1) # enable the target generator (39)
-            # ss.PQ.bus.v[Total_PQ+ig] = ss.PV.bus.v[gen_ix]
+            logging.info('Displacing unit %s' %(ss.PV.name.v[gen_ix]))
+            print('Displacing unit %s' %(ss.PV.name.v[gen_ix])) 
+
+            # displace_generator will move up to the specified Target_pu_power from PQ @ pq_ix to PV @ newgen_ix
+            Target_pu_power[ig] = displace_generator(ss, pq_ix, newgen_ix, Target_pu_power[ig])
             
-            logging.info('Displacing unit %s' %(ss.PV.name.v[ig]))
-            print('Displacing unit %s' %(ss.PV.name.v[ig])) 
-           
-            # target_power  = displace_generator(ss, ig,target_bus_idx, 1)  #Target_percentange_database
-            target_power  = displace_generator(ss, ig,target_bus_idx, Target_percentange_database[ig])  #
-            Target_percentange_database[ig] = target_power
-            displaceable_power = target_power
+            displaceable_power = Target_pu_power[ig]
             ddp = displaceable_power # ddp = delta_displaceable_power; always > 0
             
             # save the N-0 case
@@ -504,7 +543,7 @@ if __name__ == "__main__":
             N1_apparentpower_database[ig+1,0,:] = apparent_power # saving N-0 solution
             N1_busvoltage_database[ig+1,0,:] = bus_voltage # ditto
             
-            write(ss, 'temp.xlsx',overwrite = True) # save the N-0 case with a displaced generator
+            write(ss, 'temp.xlsx', overwrite = True) # save the N-0 case with a displaced generator
 
             # set filters to lines and buses that have actually changed due to displacement
 			# ds_d2b means: "delta apparent power, displacement to base". dv_d2b is analogous for voltage
@@ -514,8 +553,8 @@ if __name__ == "__main__":
             dv_alpha = 1.0
             # ds_filt_ix are the values of column indices that are to be considered in 
 			# calculate_line_loading_severity. dv_filt_ix is the same for voltage.
-			# THese values are tuples, so they are used as ds_filt_ix[0]
-			ds_filt_ix = np.nonzero(np.abs(ds_d2b - ds_d2b.mean()) > ds_alpha * ds_d2b.std())
+			# These values are tuples, so they are used as ds_filt_ix[0]
+            ds_filt_ix = np.nonzero(np.abs(ds_d2b - ds_d2b.mean()) > ds_alpha * ds_d2b.std())
             dv_filt_ix = np.nonzero(np.abs(dv_d2b - dv_d2b.mean()) > dv_alpha * dv_d2b.std())
             temp = [ss.Line.name.v[i] for i in ds_filt_ix[0]]
             logging.info('Monitoring lines:')
@@ -527,13 +566,19 @@ if __name__ == "__main__":
             logging.info(temp)
             print('Monitoring buses:', temp)
 
-            # TODO: set these up to allow no more than 1.1 flow and +/-0.05 in voltage
-            flow_sev_lim = basecase_flow_sev_lim
-            v_sev_lim = basecase_v_sev_lim
+            # Set severity limits here
+            # allowing 1.5 line loading
+            flow_sev_lim = 5*(1-0.8) + 10*(1.2-1) + 20*(1.5-1.2) # basecase_flow_sev_lim
+            # allowing 0.92pu for voltage
+            v_sev_lim = (0.95-0.92)*200 + (0.95-0.93)*100 + (0.97-0.95)*50 # basecase_v_sev_lim
+            logging.info('Flow severity limit = %g' %flow_sev_lim)
+            print('Flow severity limit = %g' %flow_sev_lim)
+            logging.info('Voltage severity limit = %g' %v_sev_lim)
+            print('Voltage severity limit = %g' %v_sev_lim)
 
             eps = 0.125  # the threshold of interval halving
             eps2 = 0.06  # the threshold of power reduction
-           # N-1 contigency
+            # N-1 contigency
             while True:          
                 line_flows_2D, bus_voltages_2D = contingency_analysis(ss, contingency_list)
                 line_flows_2D_pu = line_flows_2D/(lines_flow_limits/ss.config.mva)
@@ -563,7 +608,7 @@ if __name__ == "__main__":
                         print('  precision reached, exiting')
                         logging.debug('  precision reached, exiting')
                         break
-                    if (displaceable_power + ddp > target_power): 
+                    if (displaceable_power >= Target_pu_power[ig]): 
                         print('  success on the first try, exiting')
                         logging.debug('  success on the first try, exiting')
                         break
@@ -571,29 +616,30 @@ if __name__ == "__main__":
                     print('  increasing power by %g' %(ddp))
                     logging.debug('  increasing power by %g' %(ddp))
                 
-                #undoing the last displacement
-                ss.PQ.p0.v[-1] = 0
-                ss.PQ.q0.v[-1] = 0
-                ss.PV.p0.v[gen_ix] = ss.PV.p0.v[newgen_ix]
-                ss.PV.q0.v[gen_ix] = ss.PV.q0.v[newgen_ix]
+                # Interval halving continues, prepare for the next round
+                ss.PQ.p0.v[pq_ix] = -p_keep
+                ss.PQ.q0.v[pq_ix] = -q_keep
                 ss.PV.p0.v[newgen_ix] = 0
                 ss.PV.q0.v[newgen_ix] = 0
-                Target_percentange_database[ig] = displace_generator(ss, ig, target_bus_idx, displaceable_power)
-                write(ss, 'temp.xlsx',overwrite = True) # save the N-0 case with displaced generator
+                Target_pu_power[ig] = displace_generator(ss, pq_ix, newgen_ix, displaceable_power)
+                write(ss, 'temp.xlsx', overwrite = True) # save the N-0 case with displaced generator
 
-            # save the data after the interval halving
+            # Save the data after the interval halving
             N1_apparentpower_database[ig+1,1:,:] = line_flows_2D # +1 to account for N-0 solution
             N1_busvoltage_database[ig+1,1:,:] = bus_voltages_2D # ditto
             N1_flow_severity_database[ig+1,1:,:] = flow_sev_mx
             N1_voltage_severity_database[ig+1,1:,:] = v_sev_mx 
                 
-            # ss.PV.u.v[gen_ix] = 1 # re-enable the original unit
-            # ss.PV.u.v[newgen_ix] = 0 # disable the replacement unit
-            ss.PV.alter('u',ss.PV.idx.v[gen_ix],1)
-            ss.PQ.alter('u',ss.PQ.idx.v[Total_PQ+ig],0)
-            #restore the intial guess
-            ss.Bus.v0.v[:] = StartingCase_BusV
-            ss.Bus.a0.v[:] = StartingCase_BusA
+            # Revert the changes to begin analysis of the next generator
+            ss.PV.p0.v[newgen_ix] = 0
+            ss.PV.q0.v[newgen_ix] = 0
+            ss.PV.alter('u', ss.PV.idx.v[gen_ix], 1) # enable PV unit that was being displaced
+            ss.PQ.p0.v[pq_ix] = 0 # reset its PQ equivalent
+            ss.PQ.q0.v[pq_ix] = 0
+            ss.PQ.alter('u', ss.PQ.idx.v[pq_ix], 0)
+            # Restore the basecase voltage magnitudes and angles
+            ss.Bus.v0.v[:] = basecase_vmags
+            ss.Bus.a0.v[:] = basecase_angs
       
     if True:
         dirout = 'output/' # output directory
