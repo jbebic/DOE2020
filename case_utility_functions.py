@@ -23,15 +23,34 @@ import andes
 # from andes.core.var import BaseVar, Algeb, ExtAlgeb
 # from andes.io.xlsx import write
 
+#%% 
+def load_case(dirin:str, fnamein:str, setup=False):
+    # ss = andes.load(os.path.join(dirin, fnamein))
+    ss = andes.load(fnamein, input_path=dirin, setup=False)
+    logging.info("Loaded '%s'" %fnamein)
+    logging.info("The case has %d areas" %len(ss.Area))
+    for anum, aname, buses in zip(ss.Area.idx.v, ss.Area.name.v, ss.Area.Bus.v):
+        logging.info("  Area %d: '%s', with %d buses" %(anum, aname, len(buses)))
+    return ss
+
+#%% Read the indexed result file
+def load_displacement_analysis_results(dirin:str, fname:str):
+    df1 = pd.read_csv(os.path.join(dirin, fname),
+                      header = None)
+    return df1
+
 #%% save_results
-def save_database(input_database, dirout:str, foutroot:str):
+def save_database(input_database, dirout:str, foutroot:str, cnames=None):
     logging.debug('saving ANDES data')
-    # fetch the names of the buses and set up as columns of a dataframe
-    dfBus = pd.DataFrame(input_database)
-    # add voltage magnitudes as rows of the dataframe
+    # create a dataframe from a 2D input array
+    df = pd.DataFrame(input_database)
+    # prepare the filename
     fout = os.path.join(dirout,foutroot + '.csv')
-    dfBus.to_csv(fout, index=False)
-       
+    # Save with column names if cnames argument was specified, or "headless" otherwise
+    if cnames is None:    
+        df.to_csv(fout, index=False, header=False)
+    else:
+        df.to_csv(fout, index=False, header=cnames)
     return
 
 #%% line apparent power
@@ -45,16 +64,6 @@ def compute_lineapparentpower(ss:andes.system):
     s = np.sqrt(np.amax(np.stack((s1,s2)),axis = 0))
     return s
 
-
-#%% 
-def load_case(dirin:str, fnamein:str, setup=False):
-    # ss = andes.load(os.path.join(dirin, fnamein))
-    ss = andes.load(fnamein, input_path=dirin, setup=False)
-    logging.info("Loaded '%s'" %fnamein)
-    logging.info("The case has %d areas" %len(ss.Area))
-    for anum, aname, buses in zip(ss.Area.idx.v, ss.Area.name.v, ss.Area.Bus.v):
-        logging.info("  Area %d: '%s', with %d buses" %(anum, aname, len(buses)))
-    return ss
 
 #%% retired
 # def area_index(ss:andes.System, area_idx):

@@ -481,6 +481,8 @@ if __name__ == "__main__":
         N1_voltages = np.zeros((gen_area_total_num+1, line_total_num+1, bus_total_num)) # ditto
         N1_flow_severities = -np.ones((gen_area_total_num+1, line_total_num+1, line_total_num)) # first +1 to hold the original case;second +1 to hold N-0 solution
         N1_voltage_severities = -np.ones((gen_area_total_num+1, line_total_num+1, bus_total_num)) # ditto
+        N1_flow_masks = np.ones_like(N1_flows)
+        N1_voltage_masks = np.ones_like(N1_voltages)
         Target_pu_power = np.ones_like(area_gens_indices, dtype=float)
 
         # Perform  N-1 contigency analysis of the base case (without displacement)
@@ -611,7 +613,7 @@ if __name__ == "__main__":
 
                 flow_sev_mx = calculate_line_loading_severity(line_flows_2D_pu)
                 v_sev_mx  = calculate_bus_voltage_severity(bus_voltages_2D)
-                # let the power change to be zero and prepare for the next change of slect bus
+                # let the power change to be zero and prepare for the next change of select bus
                 check_flow_result = check_flow_severity(flow_sev_mx, flow_sev_lim, ds_filt_ix[0])
                 check_v_result = check_v_severity(v_sev_mx, v_sev_lim, dv_filt_ix[0])
                 #logging.info('  voltage severity = %g' %(check_flow_result))  # sum of the entire matrix
@@ -655,6 +657,8 @@ if __name__ == "__main__":
             N1_voltages[ig+1,1:,:] = bus_voltages_2D # ditto
             N1_flow_severities[ig+1,1:,:] = flow_sev_mx
             N1_voltage_severities[ig+1,1:,:] = v_sev_mx
+            N1_flow_masks[ig+1,1:,ds_filt_ix[0]] = 0
+            N1_voltage_masks[ig+1,1:,dv_filt_ix[0]] = 0
 
             # Revert the changes to begin analysis of the next generator
             ss.PV.p0.v[newgen_ix] = 0
@@ -712,7 +716,22 @@ if __name__ == "__main__":
         temp = np.hstack((N1_index,N1_voltages_severity)) # prepend the index column to bus voltages
         save_database(temp, dirout, 'bus_voltage_severities') # save it
 
-        save_database(Target_pu_power, dirout, 'displaced_pu_powers')
+        # Reshape flow and voltage masks into 2D data structures
+        dirout = 'output/' # output directory
+        N1_flows_mask = N1_flow_masks.reshape((gen_area_total_num+1) * (line_total_num+1), line_total_num) # +1 to account for N-0 solution
+        N1_voltages_mask = N1_voltage_masks.reshape((gen_area_total_num+1) * (line_total_num+1), bus_total_num) # ditto
+        # prepend an index column to the 2d data structures to denote the idx of each moved generator
+        gidx = [ss.PV.idx.v[i] for i in area_gens_indices] #  extract idxs of all generators in the area
+        gidx = np.hstack(([0],gidx)) # add 0 for the original case
+        N1_index = np.repeat(gidx, line_total_num+1).reshape(-1,1) # expand it to match the 2d solution arrays, then turn into a column-vector
+        temp = np.hstack((N1_index,N1_flows_mask)) # prepend the index column to line flow mask
+        save_database(temp, dirout, 'line_flow_masks') # save line flows
+        temp = np.hstack((N1_index,N1_voltages_mask)) # prepend the index column to bus voltage mask
+        save_database(temp, dirout, 'bus_voltage_masks') # save it
+
+        # Saving generator data
+        temp = np.array([[ss.PV.idx.v[i], ss.PV.name.v[i], tp, tp*ss.PV.p.v[i]] for i, tp in zip(area_gens_indices, Target_pu_power)])
+        save_database(temp, dirout, 'displaced_pu_powers', cnames=['idx', 'name', 'p_rel', 'p_pu'])
 
     # preparing for exit
     logging.shutdown()
