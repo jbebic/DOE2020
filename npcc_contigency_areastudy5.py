@@ -206,8 +206,8 @@ def contingency_analysis(ss:andes.system, contingencies:list): # system model
 
 #%% line loading severity
 def calculate_line_loading_severity(line_flows_norm,
-                                    dp_values = np.array([0.8, 1.0, 1.2]),
-                                    ks_values = np.array([5, 10, 20])):
+                                    dp_values = np.array([0.8, 1.0]), # , 1.2
+                                    ks_values = np.array([5, 10])): # , 20
 
     temp = np.ones_like(line_flows_norm)
     line_flows_severity = -temp
@@ -464,14 +464,23 @@ if __name__ == "__main__":
     if True: # the generation displacement "inner loop" "
 
         # Setting up contingencies of interest
-        # Option 1: run all line contingencies
-        # contingency_list = []
-        # # Option 2: determine which line contingencies cause islands and exclude
-        # temp1 = line_idxs_causing_islands(ss)
-        # temp2 = set(ss.Line.idx.v) - set(temp1)
-        # contingency_list = list(temp2)
-        # Option 3: filter by area and exclude island-causing contingencies
-        contingency_list = generate_contingency_list(ss, study_area)
+        option = 3        
+        if option == 1: # run all line contingencies
+            logging.info('Running all contingencies; option = %d' %option)
+            print('Running all contingencies; option = %d' %option)
+            contingency_list = []
+        elif option == 2: # determine which line contingencies cause islands and exclude them
+            logging.info('Excluding island-causing contingencies; option = %d' %option)
+            print('Excluding island-causing contingencies; option = %d' %option)
+            temp1 = line_idxs_causing_islands(ss)
+            temp2 = set(ss.Line.idx.v) - set(temp1)
+            contingency_list = list(temp2)
+        elif option == 3: # filter by area and exclude island-causing contingencies
+            logging.info('Running contingencies on lines in area %d and excluding island-causing contingencies; option = %d' %(study_area, option))
+            print('Running contingencies on lines in area %d and excluding island-causing contingencies; option = %d' %(study_area, option))
+            contingency_list = generate_contingency_list(ss, study_area)
+        else:
+            raise RuntimeError ("Unrecognized analysis option, exiting...")
 
         # Initialize numpy data structures to hold results
         line_total_num = len(ss.Line)  # 234-1 # 3 means fake line
@@ -547,6 +556,7 @@ if __name__ == "__main__":
             # displace_generator will move up to the specified Target_pu_power from PQ @ pq_ix to PV @ newgen_ix
             Target_pu_power[ig] = displace_generator(ss, pq_ix, newgen_ix, Target_pu_power[ig])
 
+            original_target = Target_pu_power[ig]
             displaceable_power = Target_pu_power[ig]
             ddp = displaceable_power # ddp = delta_displaceable_power; always > 0
 
@@ -596,7 +606,8 @@ if __name__ == "__main__":
 
             # Set severity limits here
             # allowing 1.5 line loading
-            flow_sev_lim = 5*(1-0.8) + 10*(1.2-1) + 20*(1.5-1.2) # basecase_flow_sev_lim
+            # flow_sev_lim = 5*(1-0.8) + 10*(1.2-1) + 20*(1.5-1.2) # basecase_flow_sev_lim
+            flow_sev_lim = 5*(1-0.8) + 10*(1.5-1) # basecase_flow_sev_lim
             # allowing 0.92pu for voltage
             v_sev_lim = (0.95-0.92)*200 + (0.95-0.93)*100 + (0.97-0.95)*50 # basecase_v_sev_lim
             logging.info('Flow severity limit = %g' %flow_sev_lim)
@@ -636,7 +647,7 @@ if __name__ == "__main__":
                         print('  severity within limits and precision reached, exiting')
                         logging.debug('  severity within limits and precision reached, exiting')
                         break
-                    if (displaceable_power >= Target_pu_power[ig]):
+                    if (displaceable_power + ddp >= original_target):
                         print('  severity within limits at target power, exiting')
                         logging.debug('  severity within limits at target power, exiting')
                         break
